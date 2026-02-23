@@ -37,3 +37,14 @@ High-risk requires:
 - `.agentkit/docs/PROJECT_MAP.md` MUST be updated on every ticket.
 - No bypass flags (DOC_SKIP forbidden).
 - verify must fail if PROJECT_MAP wasn’t updated.
+
+## Verification integrity (no-bypass)
+
+If tools are missing locally (uv/pnpm/make/bash), the agent must NOT:
+- change Makefile/verify scripts to bypass checks
+- add placeholder tasks that always pass
+- create alternative runners that mask failures
+
+Required action:
+- stop and provide exact install steps (Windows/Linux)
+- or create a dedicated tooling ticket to add OS-native wrappers (e.g., verify.ps1) without changing semantics.
