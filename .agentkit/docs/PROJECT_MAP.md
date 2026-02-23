@@ -27,8 +27,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Contains `project-intake` and `ticket-planning` procedural instructions.
 - `.codex/` - Codex runtime configuration and MCP server setup.
 - `services/` - Product implementation area.
-  - Current tracked state: no committed service source yet.
-  - Existing local skeleton folder may exist but is not yet part of tracked delivery.
+  - Current tracked state:
+    - `services/api/` contains the minimal FastAPI scaffold from T2.
+    - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
+    - Public bootstrap endpoint exists: `GET /health` (contract-only response).
 - `logs/agent/` - Local human-readable ticket logs (gitignored).
 
 ## 2) Key contracts & boundaries
@@ -36,7 +38,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Workflow-first repository with strict documentation and verification gates.
   - Future service code should follow clean layering and explicit boundaries from local rules.
 - Public interfaces:
-  - No committed public API contract yet; roadmap includes introducing OpenAPI baseline.
+  - Minimal public runtime endpoint exists at `GET /health` for liveness scaffold.
+  - OpenAPI contract baseline and broader API versioning remain planned for T4.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
   - No placeholder pass paths are allowed.
@@ -62,10 +65,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
 
 ## 4) Public API surface (if applicable)
 - Where the API contract lives:
-  - Not established yet (planned in roadmap ticket T4).
+  - Runtime-only contract for `GET /health` exists in code (`services/api/src/decider_api/api/routes/health.py`).
+  - Formal OpenAPI source of truth is still planned for T4.
 - Versioning strategy:
   - Planned baseline: `/api/v1`.
 - Critical endpoints / operations (planned):
+  - health endpoint (`/health`) with exact response `{ "status": "ok" }`
   - auth context endpoint
   - tenant-scoped dossier operations
   - export operation with scope + tenant guardrails
@@ -98,12 +103,16 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Runs real profile-aware checks via `.agentkit/scripts/verification_contract.py`.
   - Always runs `DOC-gate + placeholder-ban + detect + scaffold contract checks`.
   - In `scaffold-only` profile, does not require `uv`/`pnpm`.
-  - In `backend-present` profile, adds backend toolchain checks (configured in `Makefile`).
+  - In `backend-present` profile, adds backend toolchain checks (configured in `Makefile`):
+    - smoke: `uv run --directory services/api pytest -q -m smoke`
+    - local: `uv run --directory services/api pytest -q`
+    - ci: `uv run --directory services/api pytest -q --maxfail=1 --disable-warnings`
   - In `frontend-present` profile, adds frontend toolchain checks (configured in `Makefile`).
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
-  - Planned minimum: one happy path + one negative 403 across critical flows.
+  - Current implemented minimum (T2): in-process HTTP smoke for `GET /health` with status `200` and exact JSON `{ "status": "ok" }`.
+  - Broader happy-path + negative-403 policy remains for later security-sensitive endpoints.
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required: `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required: `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -211,6 +220,52 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Project tooling and language-specific commands by profile.
   - tests:
     - Called by verify scripts.
+- `services/api/pyproject.toml` - Backend project marker + dependency/test configuration.
+  - public surface / key exports:
+    - Declares backend profile marker and Python test configuration.
+  - invariants / assumptions:
+    - Enables `backend-present` verification profile.
+  - dependencies:
+    - FastAPI runtime and pytest/httpx test stack.
+  - tests:
+    - Consumed by `uv run --directory services/api pytest ...` commands.
+- `services/api/uv.lock` - Locked backend dependency graph for reproducible installs.
+  - public surface / key exports:
+    - Pins resolved Python packages for `services/api`.
+  - invariants / assumptions:
+    - Must stay in sync with `services/api/pyproject.toml`.
+  - dependencies:
+    - Generated/updated by `uv sync --directory services/api`.
+  - tests:
+    - Indirectly validated by `verify-smoke` and `verify-local` in backend profile.
+- `services/api/src/decider_api/app.py` - FastAPI entrypoint and app factory.
+  - public surface / key exports:
+    - `create_app()` and module-level `app` ASGI object.
+  - invariants / assumptions:
+    - Registers only `/health` in T2 scope.
+  - dependencies:
+    - `decider_api.settings`, `decider_api.api.routes.health`.
+  - tests:
+    - Covered by `services/api/tests/test_health_http.py`.
+- `services/api/src/decider_api/application/health.py` - Health contract provider.
+  - public surface / key exports:
+    - `get_health_response()` returns exact payload contract.
+  - invariants / assumptions:
+    - Response must remain `{ "status": "ok" }`.
+  - dependencies:
+    - none (pure function).
+  - tests:
+    - Covered by `services/api/tests/test_health_unit.py`.
+- `services/api/src/decider_api/api/routes/health.py` - Health route handler.
+  - public surface / key exports:
+    - `GET /health` endpoint.
+  - invariants / assumptions:
+    - Must not call DB or external services.
+    - Must return `200` with exact JSON payload contract.
+  - dependencies:
+    - `decider_api.application.health`.
+  - tests:
+    - Covered by HTTP smoke test.
 
 ## 10) Runbook (minimal)
 - How to run locally:
@@ -224,14 +279,21 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - PowerShell smoke: `pwsh -File .agentkit/scripts/verify.ps1 smoke`
     - PowerShell detect: `pwsh -File .agentkit/scripts/verify.ps1 detect`
 - Required env vars:
-  - None required for current doc/process-only baseline.
-  - Future service/env requirements will be added as implementation begins.
+  - None required for the current minimal `/health` scaffold.
+  - Future service/env requirements will be added in later tickets.
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
   - If DOC gate fails, update `.agentkit/docs/PROJECT_MAP.md` in the same ticket.
+  - For backend-present profile:
+    - ensure `uv` is installed and available on PATH
+    - run `uv run --directory services/api pytest -q`
+  - Start API manually:
+    - `uv run --directory services/api uvicorn decider_api.app:app --host 0.0.0.0 --port 8000`
+    - `GET /health` must return `{ "status": "ok" }`
 
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-23 [T2] Added minimal backend scaffold under `services/api` with FastAPI app factory, `/health` endpoint contract, and unit + HTTP smoke tests; updated verification map for backend-present profile.
 - 2026-02-23 [T1] Replaced placeholder verify targets with a profile-aware verification contract (`Makefile`, `verify.sh`, `verify.ps1`, `verification_contract.py`) and documented Windows-first local evidence policy.
 - 2026-02-23 [project-intake-2026-02-23] Replaced template map with concrete repository memory and aligned it to the new roadmap baseline.
