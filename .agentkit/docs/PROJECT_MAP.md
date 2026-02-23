@@ -95,17 +95,27 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ## 7) Testing & verification map
 ### Local DoD (must pass before asking to push)
 - `make verify-local` does:
-  - Contract target exists but is currently placeholder-only in `Makefile`.
-  - Roadmap T1 will replace placeholders with real checks.
+  - Runs real profile-aware checks via `.agentkit/scripts/verification_contract.py`.
+  - Always runs `DOC-gate + placeholder-ban + detect + scaffold contract checks`.
+  - In `scaffold-only` profile, does not require `uv`/`pnpm`.
+  - In `backend-present` profile, adds backend toolchain checks (configured in `Makefile`).
+  - In `frontend-present` profile, adds frontend toolchain checks (configured in `Makefile`).
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
   - Planned minimum: one happy path + one negative 403 across critical flows.
+- Windows evidence policy (source of truth for local verification on this repo):
+  - Required: `pwsh -File .agentkit/scripts/verify.ps1 smoke`
+  - Required: `pwsh -File .agentkit/scripts/verify.ps1 local`
+  - Optional on Windows: `./.agentkit/scripts/verify.sh local` (if Git Bash is available)
 
 ### CI DoD (must pass before ticket is Done)
 - `make verify-ci` does:
-  - Contract target exists but is currently placeholder-only in `Makefile`.
-  - Roadmap T12 covers full CI gate implementation.
+  - Runs real profile-aware CI checks via `Makefile` contract.
+  - Includes shared preflight (`DOC-gate + placeholder-ban + detect`) and profile-specific checks.
+- Linux CI contract entrypoints:
+  - `./.agentkit/scripts/verify.sh local`
+  - `make verify-ci`
 - Security scanning policy (high level):
   - Local rules require SAST/DAST/container scan coverage for CI in high-risk pathways.
 
@@ -161,29 +171,44 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Enforced by `.agentkit/scripts/verify.sh`.
 - `.agentkit/scripts/verify.sh` - Bash verification entrypoint + DOC gate.
   - public surface / key exports:
-    - `local`, `smoke`, and `ci` modes.
+    - `detect`, `local`, `smoke`, and `ci` modes.
   - invariants / assumptions:
     - Any non-PROJECT_MAP file change requires PROJECT_MAP update.
   - dependencies:
     - `git`, `make`, `Makefile` contract targets.
   - tests:
-    - Executed directly in ticket verification.
+    - Executed directly in Linux/CI verification paths.
 - `.agentkit/scripts/verify.ps1` - Windows-native verification runner.
   - public surface / key exports:
     - `local`, `smoke`, `ci`, `detect` modes.
   - invariants / assumptions:
-    - Fails fast on missing toolchain and placeholder artifacts.
+    - Fails fast on missing base toolchain and placeholder artifacts.
+    - Requires `uv` only when backend markers are present.
+    - Requires `node`/`pnpm` only when frontend markers are present.
   - dependencies:
-    - `git`, `python`, `make`, `uv`, `node`, `pnpm`.
+    - Always: `git`, `python`, `make`.
+    - Conditional by profile: `uv` (backend), `node` + `pnpm` (frontend).
   - tests:
     - Executed directly on Windows verification paths.
+- `.agentkit/scripts/verification_contract.py` - Shared verification preflight contract.
+  - public surface / key exports:
+    - `detect`, `doc-gate`, `placeholder-ban`, `scaffold-contract`, `verify --mode`.
+  - invariants / assumptions:
+    - Any verification mode runs DOC discipline and placeholder-ban checks.
+    - Scaffold-only verification must remain independent of backend/frontend package managers.
+  - dependencies:
+    - `python`, `git`.
+  - tests:
+    - Called from `Makefile` verify targets.
 - `Makefile` - Verification contract target definitions.
   - public surface / key exports:
-    - `verify-local`, `verify-smoke`, `verify-ci`.
+    - `detect`, `verify-local`, `verify-smoke`, `verify-ci`.
   - invariants / assumptions:
-    - Must run real checks (placeholders are transitional only).
+    - Must run real checks (no placeholder behavior).
+    - Must support profile matrix: scaffold-only / backend-present / frontend-present / backend+frontend.
   - dependencies:
-    - Project tooling and language-specific commands.
+    - `.agentkit/scripts/verification_contract.py`.
+    - Project tooling and language-specific commands by profile.
   - tests:
     - Called by verify scripts.
 
@@ -194,15 +219,19 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - use skill `ticket-planning` before implementing each roadmap ticket.
   - Verification:
     - Bash: `./.agentkit/scripts/verify.sh local`
+    - Bash detect: `./.agentkit/scripts/verify.sh detect`
     - PowerShell: `pwsh -File .agentkit/scripts/verify.ps1 local`
+    - PowerShell smoke: `pwsh -File .agentkit/scripts/verify.ps1 smoke`
+    - PowerShell detect: `pwsh -File .agentkit/scripts/verify.ps1 detect`
 - Required env vars:
   - None required for current doc/process-only baseline.
   - Future service/env requirements will be added as implementation begins.
 - Troubleshooting:
-  - If verification fails due missing tools, install required toolchain; do not add bypass scripts.
+  - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
   - If DOC gate fails, update `.agentkit/docs/PROJECT_MAP.md` in the same ticket.
 
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-23 [T1] Replaced placeholder verify targets with a profile-aware verification contract (`Makefile`, `verify.sh`, `verify.ps1`, `verification_contract.py`) and documented Windows-first local evidence policy.
 - 2026-02-23 [project-intake-2026-02-23] Replaced template map with concrete repository memory and aligned it to the new roadmap baseline.

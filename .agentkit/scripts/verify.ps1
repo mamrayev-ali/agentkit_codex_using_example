@@ -19,57 +19,116 @@ function Ok($msg) {
   Write-Host "[OK]    $msg" -ForegroundColor Green
 }
 
-# --- Hard stop: forbid fake/placeholder verification scaffolds ---
-$forbidden = @(
-  ".agentkit/scripts/verify_contract.py",
-  "services/api/scripts/placeholder_checks.py",
-  "frontend/scripts/placeholder-task.cjs"
-)
-
-foreach ($p in $forbidden) {
-  if (Test-Path $p) {
-    Fail "Forbidden placeholder verification artifact detected: $p. Remove it and restore real toolchain-based verification."
-  }
-}
-
-# --- Required tools (fail fast, no bypass) ---
 function RequireCmd($name, $hint) {
   if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
     Fail "Missing required tool: $name. $hint"
   }
 }
 
-# Always need git + python + make
+function DetectProfile() {
+  $backendMarkers = @(
+    "services/api/pyproject.toml",
+    "services/backend/pyproject.toml",
+    "backend/pyproject.toml"
+  )
+  $frontendMarkers = @(
+    "frontend/package.json",
+    "web/package.json",
+    "ui/package.json"
+  )
+
+  $hasBackend = $false
+  foreach ($path in $backendMarkers) {
+    if (Test-Path $path) {
+      $hasBackend = $true
+      break
+    }
+  }
+
+  $hasFrontend = $false
+  foreach ($path in $frontendMarkers) {
+    if (Test-Path $path) {
+      $hasFrontend = $true
+      break
+    }
+  }
+
+  $profile = "scaffold-only"
+  if ($hasBackend -and $hasFrontend) {
+    $profile = "backend+frontend"
+  } elseif ($hasBackend) {
+    $profile = "backend-present"
+  } elseif ($hasFrontend) {
+    $profile = "frontend-present"
+  }
+
+  return [PSCustomObject]@{
+    Profile = $profile
+    HasBackend = $hasBackend
+    HasFrontend = $hasFrontend
+  }
+}
+
+function InvokeMake($target) {
+  Info "Running make $target"
+  & make $target
+  if ($LASTEXITCODE -ne 0) {
+    Fail "make $target failed with exit code $LASTEXITCODE"
+  }
+}
+
+# Hard stop: forbid fake/placeholder verification artifacts.
+$forbidden = @(
+  ".agentkit/scripts/verify_contract.py",
+  "services/api/scripts/placeholder_checks.py",
+  "frontend/scripts/placeholder-task.cjs"
+)
+foreach ($path in $forbidden) {
+  if (Test-Path $path) {
+    Fail "Forbidden placeholder verification artifact detected: $path. Remove it and restore real toolchain-based verification."
+  }
+}
+
+# Base tools are always required.
 RequireCmd git "Install Git for Windows."
 RequireCmd python "Install Python 3.13+ and ensure 'python' is on PATH."
 RequireCmd make "Install GNU Make (e.g., via Chocolatey) OR run verify.sh from Git Bash. Recommended: install 'make' for Windows."
 
-if ($Mode -ne "detect") {
-  # For local/smoke/ci we require real toolchains; no placeholder passes.
-  RequireCmd uv   "Install uv (recommended) and ensure it is on PATH."
-  RequireCmd node "Install Node.js 20+ and ensure it is on PATH."
-  RequireCmd pnpm "Install pnpm and ensure it is on PATH."
-}
+$profile = DetectProfile
+Info "Detected verification profile: $($profile.Profile)"
 
 Info "Running verification mode: $Mode"
 Info "Repo root: $(Get-Location)"
 
+if ($Mode -ne "detect") {
+  # Profile-aware requirements:
+  # - scaffold-only: no uv/node/pnpm required
+  # - backend-present: uv required
+  # - frontend-present: node + pnpm required
+  if ($profile.HasBackend) {
+    RequireCmd uv "Install uv and ensure it is on PATH."
+  }
+  if ($profile.HasFrontend) {
+    RequireCmd node "Install Node.js 20+ and ensure it is on PATH."
+    RequireCmd pnpm "Install pnpm and ensure it is on PATH."
+  }
+}
+
 switch ($Mode) {
   "detect" {
-    make detect
+    InvokeMake "detect"
     Ok "detect completed"
   }
   "smoke" {
-    # Fast subset (still real). Adjust targets later as your repo grows.
-    make verify-smoke
+    InvokeMake "verify-smoke"
     Ok "verify-smoke passed"
   }
   "local" {
-    make verify-local
+    InvokeMake "verify-local"
     Ok "verify-local passed"
   }
   "ci" {
-    make verify-ci
+    InvokeMake "verify-ci"
     Ok "verify-ci passed"
   }
 }
