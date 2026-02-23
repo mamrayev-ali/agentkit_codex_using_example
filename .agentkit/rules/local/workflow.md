@@ -48,3 +48,49 @@ If tools are missing locally (uv/pnpm/make/bash), the agent must NOT:
 Required action:
 - stop and provide exact install steps (Windows/Linux)
 - or create a dedicated tooling ticket to add OS-native wrappers (e.g., verify.ps1) without changing semantics.
+
+## Development environment policy (container-first)
+
+Default mode: **container-first**.
+The agent must run all tooling (format/lint/type/tests/e2e/deps install) **inside Docker containers**.
+
+Host machine is treated as “clean”:
+- Allowed on host: git, docker, docker compose, basic file edits.
+- Not allowed on host: installing project toolchains (uv/pnpm/python deps/node_modules), except with explicit approval.
+
+If a command requires dependencies, the agent must:
+1) ensure containers are running
+2) execute the command inside the dev container (see Runbook commands below)
+3) record [ACT]/[TEST] logs with the exact docker command used.
+
+## Dependency download policy
+
+Pre-approved inside containers:
+- `uv sync` / `uv pip install` **only from lockfile / pinned versions**
+- `pnpm install` **only with pnpm-lock.yaml**
+- pulling Docker images from approved registries (default: Docker Hub) for dev services
+
+NOT allowed without explicit approval:
+- adding new dependencies (changes to pyproject.toml / package.json / lockfiles)
+- installing tools globally on host
+- downloading binaries/scripts via curl/irm from random URLs
+
+## Host safety
+- Never write outside repository root without approval.
+- Use Docker volumes for databases/caches.
+- Never store secrets in repo files. Use `.env.local` (gitignored) or Docker secrets.
+
+## Runbook (how to run commands)
+
+Start dev environment:
+- `docker compose -f docker-compose.dev.yml up -d`
+
+Run a command inside dev container:
+- `docker compose -f docker-compose.dev.yml run --rm dev <command>`
+
+Examples:
+- `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
+- `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
+
+Stop:
+- `docker compose -f docker-compose.dev.yml down -v`
