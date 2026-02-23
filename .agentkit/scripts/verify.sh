@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AgentKit verify.sh (Core)
+# AgentKit verify.sh
 # - Enforces DOC-gate: PROJECT_MAP.md must be updated on every ticket that changes repo files.
-# - Runs Makefile contract targets (verify-local / verify-ci / verify-smoke).
+# - Runs Makefile contract targets (detect / verify-local / verify-smoke / verify-ci).
 #
 # Usage:
+#   ./.agentkit/scripts/verify.sh detect
 #   ./.agentkit/scripts/verify.sh local
 #   ./.agentkit/scripts/verify.sh ci
 #   ./.agentkit/scripts/verify.sh smoke
@@ -27,30 +28,23 @@ require_project_map_exists() {
   [[ -f "$PROJECT_MAP" ]] || die "Missing PROJECT_MAP.md at: $PROJECT_MAP"
 }
 
-# DOC-gate: If any repo file changed, PROJECT_MAP.md must be changed too.
-#
-# We interpret "repo file changed" as: there is any staged or unstaged change
-# excluding the PROJECT_MAP itself.
-#
-# This is strict by design (no skip mode).
 enforce_doc_gate() {
   local status
   status="$(git -C "$ROOT_DIR" status --porcelain)"
 
   # No changes at all -> nothing to enforce.
   if [[ -z "$status" ]]; then
-    echo "✅ DOC-gate: no changes detected."
+    echo "OK: DOC-gate: no changes detected."
     return 0
   fi
 
-  # Identify changes excluding PROJECT_MAP
-  # We treat both staged and unstaged equally.
+  # Identify changes excluding PROJECT_MAP.
   local non_doc_changes
   non_doc_changes="$(echo "$status" | awk '{print $2}' | grep -vE '^\.agentkit/docs/PROJECT_MAP\.md$' || true)"
 
-  # If only PROJECT_MAP changed, that's ok.
+  # If only PROJECT_MAP changed, that is valid.
   if [[ -z "$non_doc_changes" ]]; then
-    echo "✅ DOC-gate: only PROJECT_MAP.md changed."
+    echo "OK: DOC-gate: only PROJECT_MAP.md changed."
     return 0
   fi
 
@@ -59,7 +53,7 @@ enforce_doc_gate() {
   project_map_changed="$(echo "$status" | awk '{print $2}' | grep -E '^\.agentkit/docs/PROJECT_MAP\.md$' || true)"
 
   if [[ -z "$project_map_changed" ]]; then
-    echo "❌ DOC-gate failed."
+    echo "ERROR: DOC-gate failed."
     echo ""
     echo "You changed repository files but did NOT update:"
     echo "  .agentkit/docs/PROJECT_MAP.md"
@@ -70,7 +64,7 @@ enforce_doc_gate() {
     die "Update PROJECT_MAP.md and rerun verification."
   fi
 
-  echo "✅ DOC-gate: PROJECT_MAP.md updated alongside code changes."
+  echo "OK: DOC-gate: PROJECT_MAP.md updated alongside code changes."
 }
 
 run_make_target() {
@@ -78,7 +72,6 @@ run_make_target() {
   echo ""
   echo "==> Running: make $target"
   echo ""
-
   make -C "$ROOT_DIR" "$target"
 }
 
@@ -88,6 +81,7 @@ Usage:
   ./.agentkit/scripts/verify.sh <mode>
 
 Modes:
+  detect  -> make detect
   local   -> make verify-local
   smoke   -> make verify-smoke
   ci      -> make verify-ci
@@ -102,18 +96,29 @@ main() {
   local mode="${1:-}"
   [[ -n "$mode" ]] || usage
 
-  # Enforce doc gate before verification
-  enforce_doc_gate
-
   case "$mode" in
-    local) run_make_target "verify-local" ;;
-    smoke) run_make_target "verify-smoke" ;;
-    ci)    run_make_target "verify-ci" ;;
-    *) usage ;;
+    detect)
+      run_make_target "detect"
+      ;;
+    local)
+      enforce_doc_gate
+      run_make_target "verify-local"
+      ;;
+    smoke)
+      enforce_doc_gate
+      run_make_target "verify-smoke"
+      ;;
+    ci)
+      enforce_doc_gate
+      run_make_target "verify-ci"
+      ;;
+    *)
+      usage
+      ;;
   esac
 
   echo ""
-  echo "✅ Verification complete: $mode"
+  echo "OK: Verification complete: $mode"
 }
 
 main "$@"
