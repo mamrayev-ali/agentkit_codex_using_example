@@ -77,6 +77,14 @@ function InvokeMake($target) {
   }
 }
 
+function InvokeDockerComposeMake($target) {
+  Info "Running docker compose wrapper for make $target"
+  & docker compose -f docker-compose.dev.yml run --rm dev make $target
+  if ($LASTEXITCODE -ne 0) {
+    Fail "docker compose wrapper failed for make $target with exit code $LASTEXITCODE"
+  }
+}
+
 # Hard stop: forbid fake/placeholder verification artifacts.
 $forbidden = @(
   ".agentkit/scripts/verify_contract.py",
@@ -86,6 +94,40 @@ $forbidden = @(
 foreach ($path in $forbidden) {
   if (Test-Path $path) {
     Fail "Forbidden placeholder verification artifact detected: $path. Remove it and restore real toolchain-based verification."
+  }
+}
+
+$hasComposeFile = Test-Path "docker-compose.dev.yml"
+$inDevContainer = $env:IN_DEV_CONTAINER -eq "1"
+$useDockerWrapper = $hasComposeFile -and (-not $inDevContainer)
+
+if ($useDockerWrapper) {
+  RequireCmd docker "Install Docker Desktop and ensure 'docker' is on PATH."
+  Info "Detected docker-compose.dev.yml on host. Container-first wrapper mode is active."
+  Info "Running verification mode: $Mode"
+  Info "Repo root: $(Get-Location)"
+
+  switch ($Mode) {
+    "detect" {
+      InvokeDockerComposeMake "detect"
+      Ok "detect completed"
+      exit 0
+    }
+    "smoke" {
+      InvokeDockerComposeMake "verify-smoke"
+      Ok "verify-smoke passed"
+      exit 0
+    }
+    "local" {
+      InvokeDockerComposeMake "verify-local"
+      Ok "verify-local passed"
+      exit 0
+    }
+    "ci" {
+      InvokeDockerComposeMake "verify-ci"
+      Ok "verify-ci passed"
+      exit 0
+    }
   }
 }
 

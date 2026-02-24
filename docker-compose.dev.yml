@@ -1,0 +1,25 @@
+services:
+  dev:
+    image: agentkit/dev:local
+    build:
+      context: .
+      dockerfile: docker/dev.Dockerfile
+    container_name: decider-dev
+    working_dir: /workspace
+    command: ["sleep", "infinity"]
+    init: true
+    stdin_open: true
+    tty: true
+    environment:
+      IN_DEV_CONTAINER: "1"
+      UV_CACHE_DIR: /workspace/.uv-cache
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PNPM_STORE_DIR: /pnpm-store
+    volumes:
+      - ./:/workspace
+      - dev-pnpm-store:/pnpm-store
+      - dev-pip-cache:/home/vscode/.cache/pip
+
+volumes:
+  dev-pnpm-store:
+  dev-pip-cache:
