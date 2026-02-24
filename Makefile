@@ -75,27 +75,27 @@ verify-scaffold-ci:
 	@echo scaffold-only ci checks completed.
 
 verify-backend-smoke:
-	@echo ==> backend smoke checks
+	@echo "==> backend smoke checks"
 	@$(BACKEND_SMOKE_CMD)
 
 verify-backend-local:
-	@echo ==> backend local checks
+	@echo "==> backend local checks"
 	@$(BACKEND_LOCAL_CMD)
 
 verify-backend-ci:
-	@echo ==> backend ci checks
+	@echo "==> backend ci checks"
 	@$(BACKEND_CI_CMD)
 
 verify-frontend-smoke:
-	@echo ==> frontend smoke checks
+	@echo "==> frontend smoke checks"
 	@$(FRONTEND_SMOKE_CMD)
 
 verify-frontend-local:
-	@echo ==> frontend local checks
+	@echo "==> frontend local checks"
 	@$(FRONTEND_LOCAL_CMD)
 
 verify-frontend-ci:
-	@echo ==> frontend ci checks
+	@echo "==> frontend ci checks"
 	@$(FRONTEND_CI_CMD)
 
 verify-profile-smoke: verify-scaffold-smoke

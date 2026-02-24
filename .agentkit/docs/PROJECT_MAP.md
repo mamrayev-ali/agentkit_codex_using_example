@@ -11,7 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Target product stack (planned): Python/FastAPI backend, Angular frontend, Keycloak, PostgreSQL, MongoDB, Celery.
+  - Current implemented stack: Python/FastAPI backend scaffold + Angular 21 frontend shell scaffold.
+  - Target product stack (planned next): Keycloak, PostgreSQL, MongoDB, Celery.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -31,6 +32,16 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `services/api/` contains the minimal FastAPI scaffold from T2.
     - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
     - Public bootstrap endpoint exists: `GET /health` (contract-only response).
+- `frontend/` - Angular shell scaffold from T3.
+  - Current tracked state:
+    - Standalone Angular app with route skeleton: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+    - Environment config files for dev/prod are in place.
+    - Lint/test/build commands are wired into Makefile frontend verify hooks.
+- `docker-compose.dev.yml` - Local container-first development runner.
+  - Current tracked state:
+    - Provides `dev` service to run verification commands inside Docker.
+    - Builds `dev` image from `docker/dev.Dockerfile` with `uv` preinstalled for backend verify commands.
+    - Mounts repository and caches, including dedicated pnpm store volume.
 - `logs/agent/` - Local human-readable ticket logs (gitignored).
 
 ## 2) Key contracts & boundaries
@@ -40,6 +51,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Public interfaces:
   - Minimal public runtime endpoint exists at `GET /health` for liveness scaffold.
   - OpenAPI contract baseline and broader API versioning remain planned for T4.
+  - Minimal frontend public shell exists with route skeleton and no auth/business logic yet.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
   - No placeholder pass paths are allowed.
@@ -89,13 +101,16 @@ It explains what exists now, what contracts are enforced, and where new work sho
 
 ## 6) Frontend / UI surface (if applicable)
 - Routing approach:
-  - Planned Angular feature routes with permission-aware guards.
+  - Implemented shell routes: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+  - Uses standalone components + lazy `loadComponent`.
 - State management approach:
-  - Planned use of Angular Signals/services.
+  - Current shell state is intentionally minimal; environment metadata is read-only from `src/environments/*`.
 - Where styles/tokens live:
-  - Planned integration with Figma-backed UI tokens.
+  - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
+  - Figma-backed tokens remain planned.
 - How UI is verified vs design:
-  - Planned Playwright e2e coverage for critical entitlement and export flows.
+  - Current T3 verification is lint + unit tests + production build.
+  - Playwright e2e coverage remains planned for later tickets.
 
 ## 7) Testing & verification map
 ### Local DoD (must pass before asking to push)
@@ -108,15 +123,28 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - local: `uv run --directory services/api pytest -q`
     - ci: `uv run --directory services/api pytest -q --maxfail=1 --disable-warnings`
   - In `frontend-present` profile, adds frontend toolchain checks (configured in `Makefile`).
+  - In `backend+frontend` profile, combines both backend and frontend checks in one contract run.
+  - Frontend commands configured in `Makefile`:
+    - smoke: `pnpm --dir frontend test -- --run`
+    - local: `pnpm --dir frontend lint && pnpm --dir frontend test -- --run`
+    - ci: `pnpm --dir frontend lint && pnpm --dir frontend test -- --run && pnpm --dir frontend build`
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
   - Current implemented minimum (T2): in-process HTTP smoke for `GET /health` with status `200` and exact JSON `{ "status": "ok" }`.
   - Broader happy-path + negative-403 policy remains for later security-sensitive endpoints.
 - Windows evidence policy (source of truth for local verification on this repo):
-  - Required: `pwsh -File .agentkit/scripts/verify.ps1 smoke`
-  - Required: `pwsh -File .agentkit/scripts/verify.ps1 local`
+  - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
+  - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
+  - `verify.ps1` in host context delegates to docker wrapper commands:
+    - `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
+    - `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
   - Optional on Windows: `./.agentkit/scripts/verify.sh local` (if Git Bash is available)
+- Container-first local evidence (canonical):
+  - `docker compose -f docker-compose.dev.yml up -d`
+  - `docker compose -f docker-compose.dev.yml run --rm dev make detect`
+  - `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
+  - `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
 
 ### CI DoD (must pass before ticket is Done)
 - `make verify-ci` does:
@@ -192,13 +220,14 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `local`, `smoke`, `ci`, `detect` modes.
   - invariants / assumptions:
     - Fails fast on missing base toolchain and placeholder artifacts.
-    - Requires `uv` only when backend markers are present.
-    - Requires `node`/`pnpm` only when frontend markers are present.
+    - In host context with `docker-compose.dev.yml`, acts as container-first wrapper and runs `make` targets inside `dev` container.
+    - Uses `IN_DEV_CONTAINER=1` loop-guard to avoid recursive docker wrapping.
+    - Fallback (no compose / in-container) keeps profile-aware host checks (`uv`, `node`, `pnpm`) by markers.
   - dependencies:
-    - Always: `git`, `python`, `make`.
-    - Conditional by profile: `uv` (backend), `node` + `pnpm` (frontend).
+    - Host wrapper mode: `docker` (plus `docker compose` plugin).
+    - Fallback mode: `git`, `python`, `make`, and profile-specific toolchains.
   - tests:
-    - Executed directly on Windows verification paths.
+    - Executed on Windows as the canonical host entrypoint and delegates verification into Docker.
 - `.agentkit/scripts/verification_contract.py` - Shared verification preflight contract.
   - public surface / key exports:
     - `detect`, `doc-gate`, `placeholder-ban`, `scaffold-contract`, `verify --mode`.
@@ -220,6 +249,64 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Project tooling and language-specific commands by profile.
   - tests:
     - Called by verify scripts.
+- `docker-compose.dev.yml` - Container-first local development runner.
+  - public surface / key exports:
+    - `dev` service used by runbook commands for verify/test/lint/build.
+  - invariants / assumptions:
+    - Must build from `docker/dev.Dockerfile` so `uv` is available in one-off verify runs.
+    - Must keep repository bind-mounted at `/workspace`.
+    - Must keep pnpm store outside repo tree to avoid DOC-gate noise.
+    - Must export `IN_DEV_CONTAINER=1` for verify wrapper loop-guard.
+  - dependencies:
+    - Local Docker Desktop / Docker Engine.
+  - tests:
+    - Validated via `docker compose -f docker-compose.dev.yml config`.
+- `docker/dev.Dockerfile` - Dev image definition used by `docker-compose.dev.yml`.
+  - public surface / key exports:
+    - Extends `mcr.microsoft.com/devcontainers/universal:2` and installs `uv`.
+  - invariants / assumptions:
+    - Must keep `uv` available on PATH for `Makefile` backend targets.
+  - dependencies:
+    - Python/pip in base image and Docker build access.
+  - tests:
+    - Validated by successful `docker compose -f docker-compose.dev.yml build dev`.
+- `frontend/package.json` - Frontend dependency manifest and command contract.
+  - public surface / key exports:
+    - scripts: `start`, `lint`, `test`, `build`.
+  - invariants / assumptions:
+    - `pnpm` is the package manager; lockfile is mandatory.
+  - dependencies:
+    - Angular 21, TypeScript, Vitest, ESLint toolchain.
+  - tests:
+    - Consumed by `make verify-smoke`, `make verify-local`, and `make verify-ci` in frontend profile.
+- `frontend/angular.json` - Angular workspace/build/test configuration.
+  - public surface / key exports:
+    - Build/serve/test targets and production file replacement for environments.
+  - invariants / assumptions:
+    - CLI package manager is `pnpm`.
+  - dependencies:
+    - Angular CLI/build tooling.
+  - tests:
+    - Indirectly validated through `pnpm build` and `pnpm test`.
+- `frontend/src/app/app.routes.ts` - Frontend route skeleton contract.
+  - public surface / key exports:
+    - `appRoutes` with dashboard/dossiers/watchlist/not-found routes.
+  - invariants / assumptions:
+    - Root path redirects to `dashboard`.
+    - Fallback route exists for unknown paths.
+  - dependencies:
+    - Lazy standalone page components under `frontend/src/app/pages/`.
+  - tests:
+    - Covered by `frontend/src/app/app.routes.spec.ts`.
+- `frontend/src/environments/environment.ts` - Development environment defaults.
+  - public surface / key exports:
+    - `production`, `name`, `apiBaseUrl` values for development.
+  - invariants / assumptions:
+    - API base URL points to local backend (`http://localhost:8000/api/v1`) in dev.
+  - dependencies:
+    - Replaced by production file in build configuration.
+  - tests:
+    - Covered by `frontend/src/environments/environment.spec.ts`.
 - `services/api/pyproject.toml` - Backend project marker + dependency/test configuration.
   - public surface / key exports:
     - Declares backend profile marker and Python test configuration.
@@ -275,16 +362,30 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Verification:
     - Bash: `./.agentkit/scripts/verify.sh local`
     - Bash detect: `./.agentkit/scripts/verify.sh detect`
-    - PowerShell: `pwsh -File .agentkit/scripts/verify.ps1 local`
-    - PowerShell smoke: `pwsh -File .agentkit/scripts/verify.ps1 smoke`
-    - PowerShell detect: `pwsh -File .agentkit/scripts/verify.ps1 detect`
+    - PowerShell (canonical host wrapper): `pwsh -File .agentkit/scripts/verify.ps1 detect`
+    - PowerShell (canonical host wrapper): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
+    - PowerShell (canonical host wrapper): `pwsh -File .agentkit/scripts/verify.ps1 local`
+    - PowerShell (canonical host wrapper): `pwsh -File .agentkit/scripts/verify.ps1 ci`
+  - Container-first workflow (direct):
+    - `docker compose -f docker-compose.dev.yml up -d`
+    - `docker compose -f docker-compose.dev.yml run --rm dev make detect`
+    - `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
+    - `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
+    - `docker compose -f docker-compose.dev.yml down -v`
+  - Frontend shell:
+    - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
+    - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
 - Required env vars:
   - None required for the current minimal `/health` scaffold.
   - Future service/env requirements will be added in later tickets.
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
   - If DOC gate fails, update `.agentkit/docs/PROJECT_MAP.md` in the same ticket.
-  - For backend-present profile:
+  - If DOC gate fails due accidental pnpm cache in repo, ensure `.pnpm-store/` is ignored and `PNPM_STORE_DIR` points to a Docker volume.
+  - If `verify.ps1` fails in wrapper mode, verify Docker Desktop is running and `docker compose -f docker-compose.dev.yml run --rm dev make detect` works manually.
+  - If backend checks fail with `uv: command not found` in wrapper mode, rebuild dev image:
+    - `docker compose -f docker-compose.dev.yml build --no-cache dev`
+  - For host-only fallback mode (no compose file / inside container):
     - ensure `uv` is installed and available on PATH
     - run `uv run --directory services/api pytest -q`
   - Start API manually:
@@ -294,6 +395,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-24 [T3-fix] Switched `docker-compose.dev.yml` to a built `dev` image and added `docker/dev.Dockerfile` to preinstall `uv`, removing one-off pip install from verification evidence flow.
+- 2026-02-24 [T3-policy] Formalized container-first evidence contract: host `verify.ps1` delegates to `docker compose ... run --rm dev make verify-*`; added loop-guard requirement (`IN_DEV_CONTAINER=1`) and updated runbook/docs accordingly.
+- 2026-02-24 [T3] Added Angular frontend shell scaffold under `frontend/` (route skeleton, environment config, lint/test/build wiring), introduced `docker-compose.dev.yml` for container-first workflow, and updated verification/runbook documentation for backend+frontend profile.
 - 2026-02-23 [T2] Added minimal backend scaffold under `services/api` with FastAPI app factory, `/health` endpoint contract, and unit + HTTP smoke tests; updated verification map for backend-present profile.
 - 2026-02-23 [T1] Replaced placeholder verify targets with a profile-aware verification contract (`Makefile`, `verify.sh`, `verify.ps1`, `verification_contract.py`) and documented Windows-first local evidence policy.
 - 2026-02-23 [project-intake-2026-02-23] Replaced template map with concrete repository memory and aligned it to the new roadmap baseline.

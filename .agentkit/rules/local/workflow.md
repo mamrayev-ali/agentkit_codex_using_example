@@ -63,6 +63,20 @@ If a command requires dependencies, the agent must:
 2) execute the command inside the dev container (see Runbook commands below)
 3) record [ACT]/[TEST] logs with the exact docker command used.
 
+## Verification evidence policy (strict)
+
+Canonical local evidence for verification modes `smoke` and `local` must be captured **inside** the `dev` container.
+
+On host, `verify.ps1` must act as a docker wrapper when `docker-compose.dev.yml` exists:
+- `detect` -> `docker compose -f docker-compose.dev.yml run --rm dev make detect`
+- `smoke` -> `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
+- `local` -> `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
+- `ci` -> `docker compose -f docker-compose.dev.yml run --rm dev make verify-ci`
+
+Loop guard is mandatory:
+- dev container must export `IN_DEV_CONTAINER=1`
+- in-container `verify.ps1` must not re-wrap into docker.
+
 ## Dependency download policy
 
 Pre-approved inside containers:

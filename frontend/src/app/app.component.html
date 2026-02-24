@@ -1,0 +1,17 @@
+<div class="shell">
+  <header class="shell__header">
+    <div class="shell__title">
+      <h1>{{ appName }}</h1>
+      <p>Frontend shell ({{ environmentName }})</p>
+    </div>
+    <nav class="shell__nav">
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+      <a routerLink="/dossiers" routerLinkActive="active">Dossiers</a>
+      <a routerLink="/watchlist" routerLinkActive="active">Watchlist</a>
+    </nav>
+  </header>
+
+  <main class="shell__content">
+    <router-outlet />
+  </main>
+</div>
