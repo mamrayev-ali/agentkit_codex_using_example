@@ -395,6 +395,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-24 [cleanup] Removed stray root file `backend` (`== local checks`) that was an accidental artifact and blocked creating a real `backend/` directory path.
 - 2026-02-24 [T3-fix] Switched `docker-compose.dev.yml` to a built `dev` image and added `docker/dev.Dockerfile` to preinstall `uv`, removing one-off pip install from verification evidence flow.
 - 2026-02-24 [T3-policy] Formalized container-first evidence contract: host `verify.ps1` delegates to `docker compose ... run --rm dev make verify-*`; added loop-guard requirement (`IN_DEV_CONTAINER=1`) and updated runbook/docs accordingly.
 - 2026-02-24 [T3] Added Angular frontend shell scaffold under `frontend/` (route skeleton, environment config, lint/test/build wiring), introduced `docker-compose.dev.yml` for container-first workflow, and updated verification/runbook documentation for backend+frontend profile.
