@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract + Angular 21 frontend shell scaffold.
-  - Target product stack (planned next): Keycloak, PostgreSQL, MongoDB, Celery.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, and T7 entitlement-management APIs + Angular 21 shell with backend-driven module visibility logic.
+  - Target product stack (planned next): PostgreSQL, MongoDB, Celery.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -29,17 +29,22 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `.codex/` - Codex runtime configuration and MCP server setup.
 - `services/` - Product implementation area.
   - Current tracked state:
-    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline.
+    - `services/api/` contains FastAPI scaffold plus T5/T6/T7 security and authorization baseline.
     - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
-    - Versioned public endpoints exist under `/api/v1`:
+    - Versioned public endpoints under `/api/v1` include:
       - `GET /api/v1/health`
       - `GET /api/v1/auth/context`
       - `GET /api/v1/tenants/{tenant_id}/resources`
+      - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}`
+      - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
+    - Token validation (`RS256` + `iss/aud/exp`) and tenant guard checks are enforced server-side.
+    - Entitlement updates return audit metadata payloads (`event_id`, actor/target, tenant, timestamp).
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
   - Current tracked state:
     - Standalone Angular app with route skeleton: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+    - App shell navigation visibility is aligned with backend `module_entitlements` response shape.
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
 - `docker-compose.dev.yml` - Local container-first development runner.
@@ -57,7 +62,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Versioned API baseline is active at `/api/v1`.
   - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
   - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
-  - Minimal frontend public shell exists with route skeleton and no auth/business logic yet.
+  - Auth context response includes roles/scopes/module entitlements.
+  - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
+  - Frontend shell consumes backend entitlement shape for module visibility decisions.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
   - No placeholder pass paths are allowed.
@@ -75,6 +82,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Main business rules:
   - Tenant isolation is mandatory.
   - Backend authorization is authoritative.
+  - Admin entitlement mutations are auditable actions with metadata output.
   - Sensitive data handling must avoid PII leakage in logs/artifacts.
 - Invariants:
   - Any cross-tenant access is a security incident.
@@ -93,10 +101,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T4 baseline):
+- Critical endpoints / operations (current T7 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
-  - `GET /api/v1/auth/context` -> auth context contract scaffold for T5 integration
-  - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-aware base resource contract scaffold for T6/T7
+  - `GET /api/v1/auth/context` -> authenticated context with `tenant_id`, `roles`, `scopes`, `module_entitlements`
+  - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-scoped access + entitlement gate (`dossiers` module)
+  - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement read
+  - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement update + audit metadata
 
 ## 5) Data & migrations (if applicable)
 - Database(s):
@@ -115,7 +125,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Implemented shell routes: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
   - Uses standalone components + lazy `loadComponent`.
 - State management approach:
-  - Current shell state is intentionally minimal; environment metadata is read-only from `src/environments/*`.
+  - Shell keeps lightweight module visibility state derived from backend auth-context payload (`module_entitlements`).
+  - Environment metadata remains read-only from `src/environments/*`.
 - Where styles/tokens live:
   - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
   - Figma-backed tokens remain planned.
@@ -142,12 +153,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
-  - Current implemented minimum (T4): in-process HTTP smoke for:
+  - In-process HTTP checks include:
     - `GET /health` legacy compatibility contract
     - `GET /api/v1/health` public v1 health contract
+    - auth-context token validation and claim mapping paths
+    - tenant guard negative path (`403`) and entitlement admin negative/positive paths
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
-  - Broader happy-path + negative-403 policy remains for later security-sensitive endpoints.
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -174,8 +186,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ## 8) High-risk areas
 - Auth/permissions/tenant isolation:
   - Why risky: direct security boundary and cross-tenant exposure risk.
-  - What to check: token validation, claim mapping, explicit scope checks, 403 negative tests.
-  - Where in the code: future API auth middleware/dependencies/services.
+  - What to check: token validation, claim mapping, explicit scope checks, module entitlement enforcement, 403 negative tests.
+  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/domain/{tenant_guard,permissions}.py`, `services/api/src/decider_api/application/entitlements.py`.
 - Database migrations:
   - Why risky: data integrity and rollback risk.
   - What to check: migration plan, rollback steps, single-head Alembic state.
@@ -203,6 +215,16 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `.agentkit/` framework files.
   - tests:
     - Enforced indirectly by verify scripts and workflow compliance.
+- `.codex/config.toml` - Project-scoped Codex runtime and MCP server configuration.
+  - public surface / key exports:
+    - Defines model defaults and MCP server startup commands for this repository.
+  - invariants / assumptions:
+    - `filesystem` MCP startup command must be compatible with restricted-network environments.
+    - Allowed directory must remain pinned to this repository root.
+  - dependencies:
+    - Node.js runtime for local MCP servers (`filesystem`, `playwright`).
+  - tests:
+    - Validated by successful filesystem MCP tool calls (for example `list_allowed_directories`).
 - `.agentkit/docs/ROADMAP.md` - Ordered plan of milestones and ticket scopes.
   - public surface / key exports:
     - T1..Tn work breakdown.
@@ -365,16 +387,18 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `GET /api/v1/health`
     - `GET /api/v1/auth/context`
     - `GET /api/v1/tenants/{tenant_id}/resources`
+    - `GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
   - invariants / assumptions:
     - Endpoint contracts remain backward compatible within v1.
-    - Auth context and tenant resource responses are contract scaffolds until T5/T6.
+    - Tenant scope and module entitlement checks are enforced server-side.
+    - Entitlement mutation endpoints are admin-only.
   - dependencies:
-    - `decider_api.api.schemas.v1`, `decider_api.application.*`.
+    - `decider_api.api.schemas.v1`, `decider_api.application.*`, `decider_api.domain.*`.
   - tests:
     - Covered by `services/api/tests/test_v1_http.py`.
-- `services/api/src/decider_api/api/schemas/v1.py` - Pydantic response schemas for v1 public API.
+- `services/api/src/decider_api/api/schemas/v1.py` - Pydantic request/response schemas for v1 public API.
   - public surface / key exports:
-    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`.
+    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`, `EntitlementsUpdateRequest`, `EntitlementsResponse`.
   - invariants / assumptions:
     - Defines stable response shape used by OpenAPI contract.
   - dependencies:
@@ -410,14 +434,54 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `services/api/openapi/openapi.v1.json`.
   - tests:
     - Executed in smoke/local/ci backend verification flows.
-- `services/api/tests/test_v1_application_unit.py` - Application-layer immutability contract tests for v1 scaffolds.
+- `services/api/src/decider_api/application/entitlements.py` - In-memory entitlement management and audit metadata builder.
   - public surface / key exports:
-    - Verifies `get_auth_context_response()` does not leak mutable shared list state.
-    - Verifies `list_tenant_base_resources()` returns fresh resource collections per call.
+    - Resolves effective module entitlements.
+    - Updates tenant/user managed entitlements with audit metadata.
+    - Resets state for deterministic tests.
   - invariants / assumptions:
-    - Contract provider functions must remain side-effect free and immutable across calls.
+    - Managed updates override claim-derived defaults.
+    - Returns immutable list copies to callers.
   - dependencies:
-    - `decider_api.application.auth_context`, `decider_api.application.tenant_resources`.
+    - `decider_api.domain.permissions`.
+  - tests:
+    - Covered by `services/api/tests/test_permissions_unit.py` and HTTP route tests.
+- `services/api/src/decider_api/domain/permissions.py` - Permission and module policy helpers.
+  - public surface / key exports:
+    - Supported module constants, module normalization, admin check, default module mapping.
+  - invariants / assumptions:
+    - Unknown modules are rejected.
+    - Admin decision uses role/scope allow-list.
+  - dependencies:
+    - none (pure policy functions).
+  - tests:
+    - Covered by `services/api/tests/test_permissions_unit.py`.
+- `services/api/tests/test_v1_application_unit.py` - Application-layer contract tests.
+  - public surface / key exports:
+    - Verifies auth context mapping and managed entitlement overrides.
+    - Verifies immutable response payload behavior.
+  - invariants / assumptions:
+    - Application provider functions remain side-effect free for returned payloads.
+  - dependencies:
+    - `decider_api.application.auth_context`, `decider_api.application.entitlements`, `decider_api.application.tenant_resources`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_v1_http.py` - HTTP route authorization tests.
+  - public surface / key exports:
+    - Verifies tenant guard, token auth failures, admin entitlement mutation paths, and 403 negative cases.
+  - invariants / assumptions:
+    - Server-side permission checks remain authoritative.
+  - dependencies:
+    - `decider_api.api.routes.v1`, auth dependencies, entitlement application state.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_permissions_unit.py` - Unit tests for permission policy helpers and entitlement resolution.
+  - public surface / key exports:
+    - Verifies default module mapping, admin checks, module validation, and managed entitlement precedence.
+  - invariants / assumptions:
+    - Permission policy remains deterministic and explicit.
+  - dependencies:
+    - `decider_api.domain.permissions`, `decider_api.application.entitlements`.
   - tests:
     - Executed in backend local/ci verification flows.
 
@@ -443,10 +507,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
 - Required env vars:
-  - None required for the current T4 contract scaffold (`/api/v1/health`, `/api/v1/auth/context`, `/api/v1/tenants/{tenant_id}/resources`).
-  - Future service/env requirements will be added in later tickets.
+  - Public health endpoint works without auth env vars.
+  - Authenticated endpoints require Keycloak validation config in real runtime:
+    - `DECIDER_KEYCLOAK_ISSUER`
+    - `DECIDER_KEYCLOAK_AUDIENCE`
+    - `DECIDER_KEYCLOAK_JWKS_JSON`
+    - optional `DECIDER_KEYCLOAK_TENANT_CLAIMS` (csv; defaults to `tenant_id,tenant,org_id`).
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
+  - If filesystem MCP fails to initialize, verify `.codex/config.toml` and user `~/.codex/config.toml` use a valid local `node` command for `@modelcontextprotocol/server-filesystem` and a correct absolute allowed-directory path for this repo.
   - If DOC gate fails, update `.agentkit/docs/PROJECT_MAP.md` in the same ticket.
   - If DOC gate fails due accidental pnpm cache in repo, ensure `.pnpm-store/` is ignored and `PNPM_STORE_DIR` points to a Docker volume.
   - If `verify.ps1` fails in wrapper mode, verify Docker Desktop is running and `docker compose -f docker-compose.dev.yml run --rm dev make detect` works manually.
@@ -463,6 +532,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-25 [T7] Added server-side entitlement management APIs (`GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`), module-level access enforcement on tenant resources, audit metadata for entitlement mutations, and frontend module visibility alignment with backend `module_entitlements` response.
+- 2026-02-25 [mcp-fix] Updated project MCP config (`.codex/config.toml`) for filesystem server startup compatibility in restricted-network environments (direct `node` entrypoint + repo absolute allowed-directory path).
 - 2026-02-24 [T4] Added versioned public API baseline under `/api/v1`, checked-in OpenAPI contract (`services/api/openapi/openapi.v1.json`), runtime/spec sync tests, and explicit v1 breaking-change policy.
 - 2026-02-24 [cleanup] Removed stray root file `backend` (`== local checks`) that was an accidental artifact and blocked creating a real `backend/` directory path.
 - 2026-02-24 [T3-fix] Switched `docker-compose.dev.yml` to a built `dev` image and added `docker/dev.Dockerfile` to preinstall `uv`, removing one-off pip install from verification evidence flow.

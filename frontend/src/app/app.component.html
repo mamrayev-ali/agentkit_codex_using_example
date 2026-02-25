@@ -5,9 +5,15 @@
       <p>Frontend shell ({{ environmentName }})</p>
     </div>
     <nav class="shell__nav">
-      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-      <a routerLink="/dossiers" routerLinkActive="active">Dossiers</a>
-      <a routerLink="/watchlist" routerLinkActive="active">Watchlist</a>
+      <a *ngIf="isModuleVisible('dashboard')" routerLink="/dashboard" routerLinkActive="active">
+        Dashboard
+      </a>
+      <a *ngIf="isModuleVisible('dossiers')" routerLink="/dossiers" routerLinkActive="active">
+        Dossiers
+      </a>
+      <a *ngIf="isModuleVisible('watchlist')" routerLink="/watchlist" routerLinkActive="active">
+        Watchlist
+      </a>
     </nav>
   </header>
 
