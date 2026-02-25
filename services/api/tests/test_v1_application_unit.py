@@ -1,5 +1,17 @@
 from decider_api.application.auth_context import build_auth_context_response
+from decider_api.application.entitlements import (
+    reset_entitlements_state,
+    update_managed_modules,
+)
 from decider_api.application.tenant_resources import list_tenant_base_resources
+
+
+def setup_function() -> None:
+    reset_entitlements_state()
+
+
+def teardown_function() -> None:
+    reset_entitlements_state()
 
 
 def test_auth_context_response_maps_claims_consistently() -> None:
@@ -27,7 +39,30 @@ def test_auth_context_response_maps_claims_consistently() -> None:
         "tenant_id": "acme",
         "scopes": ["read:data", "export:data", "watchlist:view"],
         "roles": ["user", "analyst", "operator", "viewer"],
+        "module_entitlements": ["dashboard", "dossiers", "watchlist"],
     }
+
+
+def test_auth_context_response_reflects_managed_entitlements() -> None:
+    update_managed_modules(
+        tenant_id="acme",
+        subject="user-123",
+        enabled_modules=["dashboard", "watchlist"],
+        actor_subject="admin-1",
+    )
+    claims = {
+        "sub": "user-123",
+        "tenant_id": "acme",
+        "scope": "read:data watchlist:view",
+        "roles": ["user"],
+    }
+
+    response = build_auth_context_response(
+        claims=claims,
+        tenant_claim_names=("tenant_id",),
+    )
+
+    assert response["module_entitlements"] == ["dashboard", "watchlist"]
 
 
 def test_auth_context_response_returns_fresh_lists() -> None:
@@ -44,6 +79,7 @@ def test_auth_context_response_returns_fresh_lists() -> None:
     )
     first["scopes"].append("export:data")
     first["roles"].append("admin")
+    first["module_entitlements"].append("watchlist")
 
     second = build_auth_context_response(
         claims=claims,
@@ -56,6 +92,7 @@ def test_auth_context_response_returns_fresh_lists() -> None:
         "tenant_id": "acme",
         "scopes": ["read:data"],
         "roles": ["analyst"],
+        "module_entitlements": ["dashboard", "dossiers", "watchlist"],
     }
 
 

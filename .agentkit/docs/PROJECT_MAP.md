@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract, Keycloak-style RS256 bearer token validation, T6 tenant guardrails for tenant-bound endpoint access, and Angular 21 frontend shell scaffold.
-  - Target product stack (planned next): PostgreSQL, MongoDB, Celery, full Keycloak/RBAC rollout across tenant-guarded endpoints.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, and T7 entitlement-management APIs + Angular 21 shell with backend-driven module visibility logic.
+  - Target product stack (planned next): PostgreSQL, MongoDB, Celery.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -29,19 +29,22 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `.codex/` - Codex runtime configuration and MCP server setup.
 - `services/` - Product implementation area.
   - Current tracked state:
-    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline, T5 auth validation slice, and T6 tenant isolation guardrails.
+    - `services/api/` contains FastAPI scaffold plus T5/T6/T7 security and authorization baseline.
     - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
-    - Versioned public endpoints exist under `/api/v1`:
+    - Versioned public endpoints under `/api/v1` include:
       - `GET /api/v1/health`
       - `GET /api/v1/auth/context`
       - `GET /api/v1/tenants/{tenant_id}/resources`
-    - `/api/v1/auth/context` enforces `Authorization: Bearer <JWT>` and validates RS256 signature + issuer + audience + expiry + required tenant claim against configured Keycloak-like settings/JWKS.
-    - `/api/v1/tenants/{tenant_id}/resources` now enforces bearer auth and blocks cross-tenant access with `403 Forbidden`.
+      - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}`
+      - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
+    - Token validation (`RS256` + `iss/aud/exp`) and tenant guard checks are enforced server-side.
+    - Entitlement updates return audit metadata payloads (`event_id`, actor/target, tenant, timestamp).
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
   - Current tracked state:
     - Standalone Angular app with route skeleton: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+    - App shell navigation visibility is aligned with backend `module_entitlements` response shape.
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
 - `docker-compose.dev.yml` - Local container-first development runner.
@@ -58,10 +61,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Public interfaces:
   - Versioned API baseline is active at `/api/v1`.
   - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
-  - Auth context endpoint under `v1` rejects missing/invalid/expired tokens with `401`.
-  - Tenant-bound resources reject cross-tenant access with `403`.
   - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
-  - Minimal frontend public shell exists with route skeleton and no auth/business logic yet.
+  - Auth context response includes roles/scopes/module entitlements.
+  - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
+  - Frontend shell consumes backend entitlement shape for module visibility decisions.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
   - No placeholder pass paths are allowed.
@@ -79,6 +82,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Main business rules:
   - Tenant isolation is mandatory.
   - Backend authorization is authoritative.
+  - Admin entitlement mutations are auditable actions with metadata output.
   - Sensitive data handling must avoid PII leakage in logs/artifacts.
 - Invariants:
   - Any cross-tenant access is a security incident.
@@ -97,10 +101,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T6 baseline):
+- Critical endpoints / operations (current T7 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
-  - `GET /api/v1/auth/context` -> requires Bearer token, validates RS256 signature + issuer/audience/expiry + required tenant claim, returns normalized auth context (`subject`, `tenant_id`, `scopes`, `roles`)
-  - `GET /api/v1/tenants/{tenant_id}/resources` -> requires Bearer token, same-tenant access returns `200`, cross-tenant access returns `403`
+  - `GET /api/v1/auth/context` -> authenticated context with `tenant_id`, `roles`, `scopes`, `module_entitlements`
+  - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-scoped access + entitlement gate (`dossiers` module)
+  - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement read
+  - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement update + audit metadata
 
 ## 5) Data & migrations (if applicable)
 - Database(s):
@@ -119,7 +125,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Implemented shell routes: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
   - Uses standalone components + lazy `loadComponent`.
 - State management approach:
-  - Current shell state is intentionally minimal; environment metadata is read-only from `src/environments/*`.
+  - Shell keeps lightweight module visibility state derived from backend auth-context payload (`module_entitlements`).
+  - Environment metadata remains read-only from `src/environments/*`.
 - Where styles/tokens live:
   - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
   - Figma-backed tokens remain planned.
@@ -146,15 +153,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
-  - Current implemented minimum (T6): in-process HTTP smoke for:
+  - In-process HTTP checks include:
     - `GET /health` legacy compatibility contract
     - `GET /api/v1/health` public v1 health contract
-    - `GET /api/v1/tenants/{tenant_id}/resources` with valid same-tenant token -> `200`
-    - `GET /api/v1/tenants/{tenant_id}/resources` with valid cross-tenant token -> `403`
+    - auth-context token validation and claim mapping paths
+    - tenant guard negative path (`403`) and entitlement admin negative/positive paths
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
-  - Auth validation coverage (T5) includes issuer/audience/expiry/signature/tenant-claim rejection tests and endpoint-level 401/200 behavior for `/api/v1/auth/context`.
-  - T6 coverage adds explicit negative `403` cross-tenant checks for tenant-bound resources.
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -181,8 +186,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ## 8) High-risk areas
 - Auth/permissions/tenant isolation:
   - Why risky: direct security boundary and cross-tenant exposure risk.
-  - What to check: token validation, claim mapping, explicit scope checks, 403 negative tests.
-  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/application/auth_context.py`, `services/api/src/decider_api/domain/tenant_guard.py`, `services/api/src/decider_api/api/routes/v1.py`.
+  - What to check: token validation, claim mapping, explicit scope checks, module entitlement enforcement, 403 negative tests.
+  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/domain/{tenant_guard,permissions}.py`, `services/api/src/decider_api/application/entitlements.py`.
 - Database migrations:
   - Why risky: data integrity and rollback risk.
   - What to check: migration plan, rollback steps, single-head Alembic state.
@@ -210,6 +215,16 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `.agentkit/` framework files.
   - tests:
     - Enforced indirectly by verify scripts and workflow compliance.
+- `.codex/config.toml` - Project-scoped Codex runtime and MCP server configuration.
+  - public surface / key exports:
+    - Defines model defaults and MCP server startup commands for this repository.
+  - invariants / assumptions:
+    - `filesystem` MCP startup command must be compatible with restricted-network environments.
+    - Allowed directory must remain pinned to this repository root.
+  - dependencies:
+    - Node.js runtime for local MCP servers (`filesystem`, `playwright`).
+  - tests:
+    - Validated by successful filesystem MCP tool calls (for example `list_allowed_directories`).
 - `.agentkit/docs/ROADMAP.md` - Ordered plan of milestones and ticket scopes.
   - public surface / key exports:
     - T1..Tn work breakdown.
@@ -372,50 +387,18 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `GET /api/v1/health`
     - `GET /api/v1/auth/context`
     - `GET /api/v1/tenants/{tenant_id}/resources`
+    - `GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
   - invariants / assumptions:
     - Endpoint contracts remain backward compatible within v1.
-    - `/api/v1/auth/context` is bearer-protected and returns 401 for invalid/missing/expired/missing-tenant-claim tokens.
-    - `/api/v1/tenants/{tenant_id}/resources` is bearer-protected and must enforce tenant match (`token tenant == path tenant`), otherwise return `403`.
+    - Tenant scope and module entitlement checks are enforced server-side.
+    - Entitlement mutation endpoints are admin-only.
   - dependencies:
-    - `decider_api.api.schemas.v1`, `decider_api.api.dependencies.auth`, `decider_api.application.*`, `decider_api.domain.tenant_guard`.
+    - `decider_api.api.schemas.v1`, `decider_api.application.*`, `decider_api.domain.*`.
   - tests:
-    - Covered by `services/api/tests/test_v1_http.py` and `services/api/tests/test_auth_context_authn.py`.
-- `services/api/src/decider_api/api/dependencies/auth.py` - FastAPI dependency for authenticated auth-context resolution.
+    - Covered by `services/api/tests/test_v1_http.py`.
+- `services/api/src/decider_api/api/schemas/v1.py` - Pydantic request/response schemas for v1 public API.
   - public surface / key exports:
-    - `get_token_validator()`
-    - `get_authenticated_auth_context()`
-  - invariants / assumptions:
-    - Never leak token parsing/validation internals in HTTP error detail.
-    - Converts token validation failures to `401 Invalid or expired token.`
-  - dependencies:
-    - `decider_api.infrastructure.auth.token_validator`, `decider_api.application.auth_context`, `decider_api.settings`.
-  - tests:
-    - Indirectly covered by `services/api/tests/test_auth_context_authn.py`.
-- `services/api/src/decider_api/infrastructure/auth/token_validator.py` - RS256 JWT validation against Keycloak-style JWKS.
-  - public surface / key exports:
-    - `KeycloakTokenValidator`
-    - `TokenValidationError`
-  - invariants / assumptions:
-    - Accepts only RS256 JWTs with matching `kid`.
-    - Enforces claim checks: `iss`, `aud`, `sub`, `exp`.
-    - Uses immutable parsed JWK registry and explicit error paths.
-  - dependencies:
-    - Python stdlib only (`base64`, `hashlib`, `json`, `time`).
-  - tests:
-    - Covered by `services/api/tests/test_auth_context_authn.py`.
-- `services/api/src/decider_api/settings.py` - App settings and auth configuration.
-  - public surface / key exports:
-    - `AppSettings`, `get_settings()`.
-  - invariants / assumptions:
-    - Reads auth config from env (`DECIDER_KEYCLOAK_ISSUER`, `DECIDER_KEYCLOAK_AUDIENCE`, `DECIDER_KEYCLOAK_JWKS_JSON`, `DECIDER_KEYCLOAK_TENANT_CLAIMS`).
-    - Settings are cached for stable per-process configuration.
-  - dependencies:
-    - OS env vars.
-  - tests:
-    - Indirectly validated via auth endpoint + validator tests.
-- `services/api/src/decider_api/api/schemas/v1.py` - Pydantic response schemas for v1 public API.
-  - public surface / key exports:
-    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`.
+    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`, `EntitlementsUpdateRequest`, `EntitlementsResponse`.
   - invariants / assumptions:
     - Defines stable response shape used by OpenAPI contract.
   - dependencies:
@@ -451,44 +434,54 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `services/api/openapi/openapi.v1.json`.
   - tests:
     - Executed in smoke/local/ci backend verification flows.
-- `services/api/tests/test_v1_application_unit.py` - Application-layer mapping/immutability tests for v1 scaffolds.
+- `services/api/src/decider_api/application/entitlements.py` - In-memory entitlement management and audit metadata builder.
   - public surface / key exports:
-    - Verifies claims -> auth-context normalization (tenant/scopes/roles) is deterministic.
-    - Verifies `list_tenant_base_resources()` returns fresh resource collections per call.
+    - Resolves effective module entitlements.
+    - Updates tenant/user managed entitlements with audit metadata.
+    - Resets state for deterministic tests.
   - invariants / assumptions:
-    - Contract provider functions must remain side-effect free and immutable across calls.
+    - Managed updates override claim-derived defaults.
+    - Returns immutable list copies to callers.
   - dependencies:
-    - `decider_api.application.auth_context`, `decider_api.application.tenant_resources`.
+    - `decider_api.domain.permissions`.
+  - tests:
+    - Covered by `services/api/tests/test_permissions_unit.py` and HTTP route tests.
+- `services/api/src/decider_api/domain/permissions.py` - Permission and module policy helpers.
+  - public surface / key exports:
+    - Supported module constants, module normalization, admin check, default module mapping.
+  - invariants / assumptions:
+    - Unknown modules are rejected.
+    - Admin decision uses role/scope allow-list.
+  - dependencies:
+    - none (pure policy functions).
+  - tests:
+    - Covered by `services/api/tests/test_permissions_unit.py`.
+- `services/api/tests/test_v1_application_unit.py` - Application-layer contract tests.
+  - public surface / key exports:
+    - Verifies auth context mapping and managed entitlement overrides.
+    - Verifies immutable response payload behavior.
+  - invariants / assumptions:
+    - Application provider functions remain side-effect free for returned payloads.
+  - dependencies:
+    - `decider_api.application.auth_context`, `decider_api.application.entitlements`, `decider_api.application.tenant_resources`.
   - tests:
     - Executed in backend local/ci verification flows.
-- `services/api/tests/test_auth_context_authn.py` - Auth validation tests for `/api/v1/auth/context`.
+- `services/api/tests/test_v1_http.py` - HTTP route authorization tests.
   - public surface / key exports:
-    - Unit-level rejection tests for invalid issuer/audience/expired/signature/missing-tenant-claim tokens.
-    - HTTP-level 401/200 contract tests for missing/expired/missing-tenant-claim/valid bearer tokens.
+    - Verifies tenant guard, token auth failures, admin entitlement mutation paths, and 403 negative cases.
   - invariants / assumptions:
-    - Endpoint returns unified unauthorized error detail without leaking token internals.
+    - Server-side permission checks remain authoritative.
   - dependencies:
-    - `decider_api.infrastructure.auth.token_validator`, `decider_api.api.dependencies.auth`.
+    - `decider_api.api.routes.v1`, auth dependencies, entitlement application state.
   - tests:
     - Executed in backend local/ci verification flows.
-- `services/api/src/decider_api/domain/tenant_guard.py` - Tenant isolation policy checks for tenant-bound endpoints.
+- `services/api/tests/test_permissions_unit.py` - Unit tests for permission policy helpers and entitlement resolution.
   - public surface / key exports:
-    - `is_tenant_access_allowed()`
+    - Verifies default module mapping, admin checks, module validation, and managed entitlement precedence.
   - invariants / assumptions:
-    - Deny-by-default when actor tenant is missing or different from requested tenant.
+    - Permission policy remains deterministic and explicit.
   - dependencies:
-    - none (pure function).
-  - tests:
-    - Covered by `services/api/tests/test_tenant_guard_unit.py`.
-- `services/api/tests/test_tenant_guard_unit.py` - Unit tests for tenant guard policy.
-  - public surface / key exports:
-    - same-tenant allow behavior
-    - cross-tenant deny behavior
-    - missing-tenant deny behavior
-  - invariants / assumptions:
-    - Guardrail policy must stay deterministic and deny-by-default.
-  - dependencies:
-    - `decider_api.domain.tenant_guard`.
+    - `decider_api.domain.permissions`, `decider_api.application.entitlements`.
   - tests:
     - Executed in backend local/ci verification flows.
 
@@ -514,13 +507,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
 - Required env vars:
-  - `DECIDER_KEYCLOAK_ISSUER` (required for successful token validation in `/api/v1/auth/context`).
-  - `DECIDER_KEYCLOAK_AUDIENCE` (required for audience validation).
-  - `DECIDER_KEYCLOAK_JWKS_JSON` (required for signature validation, JSON with JWKS `keys`).
-  - `DECIDER_KEYCLOAK_TENANT_CLAIMS` (optional CSV, default: `tenant_id,tenant,org_id`).
-  - Without these values, auth-context requests are expected to return `401`.
+  - Public health endpoint works without auth env vars.
+  - Authenticated endpoints require Keycloak validation config in real runtime:
+    - `DECIDER_KEYCLOAK_ISSUER`
+    - `DECIDER_KEYCLOAK_AUDIENCE`
+    - `DECIDER_KEYCLOAK_JWKS_JSON`
+    - optional `DECIDER_KEYCLOAK_TENANT_CLAIMS` (csv; defaults to `tenant_id,tenant,org_id`).
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
+  - If filesystem MCP fails to initialize, verify `.codex/config.toml` and user `~/.codex/config.toml` use a valid local `node` command for `@modelcontextprotocol/server-filesystem` and a correct absolute allowed-directory path for this repo.
   - If DOC gate fails, update `.agentkit/docs/PROJECT_MAP.md` in the same ticket.
   - If DOC gate fails due accidental pnpm cache in repo, ensure `.pnpm-store/` is ignored and `PNPM_STORE_DIR` points to a Docker volume.
   - If `verify.ps1` fails in wrapper mode, verify Docker Desktop is running and `docker compose -f docker-compose.dev.yml run --rm dev make detect` works manually.
@@ -537,6 +532,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-25 [T7] Added server-side entitlement management APIs (`GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`), module-level access enforcement on tenant resources, audit metadata for entitlement mutations, and frontend module visibility alignment with backend `module_entitlements` response.
+- 2026-02-25 [mcp-fix] Updated project MCP config (`.codex/config.toml`) for filesystem server startup compatibility in restricted-network environments (direct `node` entrypoint + repo absolute allowed-directory path).
 - 2026-02-25 [T6] Enforced tenant isolation guardrails on `GET /api/v1/tenants/{tenant_id}/resources` with backend bearer auth dependency, explicit cross-tenant `403` denial tests, and aligned backend test imports after rebase on `main`.
 - 2026-02-25 [T5] Implemented bearer auth for `GET /api/v1/auth/context` with RS256 JWT validation (issuer/audience/expiry/signature + required tenant claim), normalized claims mapping (tenant/scopes/roles), new auth tests, and updated OpenAPI contract.
 - 2026-02-24 [T4] Added versioned public API baseline under `/api/v1`, checked-in OpenAPI contract (`services/api/openapi/openapi.v1.json`), runtime/spec sync tests, and explicit v1 breaking-change policy.

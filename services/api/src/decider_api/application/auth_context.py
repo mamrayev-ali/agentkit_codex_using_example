@@ -1,5 +1,7 @@
 from collections.abc import Mapping, Sequence
 
+from decider_api.application.entitlements import resolve_modules_for_subject
+
 
 def _append_unique(values: list[str], candidate: str) -> None:
     if candidate and candidate not in values:
@@ -73,10 +75,21 @@ def build_auth_context_response(
     if not isinstance(subject, str) or not subject:
         raise ValueError("Token subject claim is required.")
 
+    tenant_id = _extract_tenant_id(claims, tenant_claim_names)
+    scopes = _extract_scopes(claims)
+    roles = _extract_roles(claims)
+    module_entitlements = resolve_modules_for_subject(
+        tenant_id=tenant_id,
+        subject=subject,
+        scopes=scopes,
+        roles=roles,
+    )
+
     return {
         "authenticated": True,
         "subject": subject,
-        "tenant_id": _extract_tenant_id(claims, tenant_claim_names),
-        "scopes": _extract_scopes(claims),
-        "roles": _extract_roles(claims),
+        "tenant_id": tenant_id,
+        "scopes": scopes,
+        "roles": roles,
+        "module_entitlements": module_entitlements,
     }

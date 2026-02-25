@@ -18,8 +18,8 @@ approval_policy = "on-request"
 # playwright: browser automation for UI verification
 
 [mcp_servers.filesystem]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem@latest", "--allowed-directories", "."]
+command = "node"
+args = ["C:\\Users\\Administrator\\AppData\\Local\\npm-cache\\_npx\\a3241bba59c344f5\\node_modules\\@modelcontextprotocol\\server-filesystem\\dist\\index.js", "C:\\Users\\Administrator\\Desktop\\work\\AI_Agents\\agentkit_codex_example\\agentkit_codex"]
 
 [mcp_servers.figma]
 url = "https://mcp.figma.com/mcp"
@@ -33,3 +33,4 @@ url = "https://developers.openai.com/mcp"
 [mcp_servers.playwright]
 command = "npx"
 args = ["@playwright/mcp@latest"]
+

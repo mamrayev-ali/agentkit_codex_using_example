@@ -196,4 +196,5 @@ def test_auth_context_endpoint_returns_mapped_claims() -> None:
         "tenant_id": "acme",
         "scopes": ["read:data", "export:data", "watchlist:view"],
         "roles": ["user", "analyst", "operator"],
+        "module_entitlements": ["dashboard", "dossiers", "watchlist"],
     }

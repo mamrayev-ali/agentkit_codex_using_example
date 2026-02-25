@@ -7,6 +7,13 @@
             "title": "Authenticated",
             "type": "boolean"
           },
+          "module_entitlements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Module Entitlements",
+            "type": "array"
+          },
           "roles": {
             "items": {
               "type": "string"
@@ -43,6 +50,93 @@
           "tenant_id"
         ],
         "title": "AuthContextResponse",
+        "type": "object"
+      },
+      "EntitlementAuditMetadata": {
+        "properties": {
+          "action": {
+            "const": "entitlements.updated",
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_subject": {
+            "title": "Actor Subject",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "target_subject": {
+            "title": "Target Subject",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "action",
+          "actor_subject",
+          "target_subject",
+          "tenant_id",
+          "occurred_at"
+        ],
+        "title": "EntitlementAuditMetadata",
+        "type": "object"
+      },
+      "EntitlementsResponse": {
+        "properties": {
+          "audit_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitlementAuditMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled_modules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Modules",
+            "type": "array"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "subject"
+        ],
+        "title": "EntitlementsResponse",
+        "type": "object"
+      },
+      "EntitlementsUpdateRequest": {
+        "properties": {
+          "enabled_modules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Modules",
+            "type": "array"
+          }
+        },
+        "title": "EntitlementsUpdateRequest",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -226,6 +320,153 @@
           }
         },
         "summary": "Get Health V1",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/entitlements/{subject}": {
+      "get": {
+        "operationId": "get_tenant_entitlements_v1_api_v1_tenants__tenant_id__entitlements__subject__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tenant Entitlements V1",
+        "tags": [
+          "v1"
+        ]
+      },
+      "put": {
+        "operationId": "put_tenant_entitlements_v1_api_v1_tenants__tenant_id__entitlements__subject__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntitlementsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Put Tenant Entitlements V1",
         "tags": [
           "v1"
         ]
