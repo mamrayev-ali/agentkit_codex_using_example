@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from decider_api.api.dependencies.auth import get_token_validator
 from decider_api.app import app
-from tests.test_auth_context_authn import _VALID_TOKEN, _build_validator
+from test_auth_context_authn import _VALID_TOKEN, _build_validator
 
 
 def test_v1_tenant_resources_endpoint_allows_same_tenant() -> None:

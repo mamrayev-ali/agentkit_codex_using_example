@@ -537,7 +537,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
-- 2026-02-25 [T6] Enforced tenant isolation guardrails on `GET /api/v1/tenants/{tenant_id}/resources` with backend bearer auth dependency and explicit cross-tenant `403` denial tests.
+- 2026-02-25 [T6] Enforced tenant isolation guardrails on `GET /api/v1/tenants/{tenant_id}/resources` with backend bearer auth dependency, explicit cross-tenant `403` denial tests, and aligned backend test imports after rebase on `main`.
 - 2026-02-25 [T5] Implemented bearer auth for `GET /api/v1/auth/context` with RS256 JWT validation (issuer/audience/expiry/signature + required tenant claim), normalized claims mapping (tenant/scopes/roles), new auth tests, and updated OpenAPI contract.
 - 2026-02-24 [T4] Added versioned public API baseline under `/api/v1`, checked-in OpenAPI contract (`services/api/openapi/openapi.v1.json`), runtime/spec sync tests, and explicit v1 breaking-change policy.
 - 2026-02-24 [cleanup] Removed stray root file `backend` (`== local checks`) that was an accidental artifact and blocked creating a real `backend/` directory path.
