@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract + Angular 21 frontend shell scaffold.
-  - Target product stack (planned next): Keycloak, PostgreSQL, MongoDB, Celery.
+  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract, Keycloak-style RS256 bearer token validation for `/api/v1/auth/context`, and Angular 21 frontend shell scaffold.
+  - Target product stack (planned next): PostgreSQL, MongoDB, Celery, full Keycloak/RBAC rollout across tenant-guarded endpoints.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -29,12 +29,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `.codex/` - Codex runtime configuration and MCP server setup.
 - `services/` - Product implementation area.
   - Current tracked state:
-    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline.
+    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline and T5 auth validation slice.
     - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
     - Versioned public endpoints exist under `/api/v1`:
       - `GET /api/v1/health`
       - `GET /api/v1/auth/context`
       - `GET /api/v1/tenants/{tenant_id}/resources`
+    - `/api/v1/auth/context` now enforces `Authorization: Bearer <JWT>` and validates RS256 signature + issuer + audience + expiry + required tenant claim against configured Keycloak-like settings/JWKS.
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
@@ -56,6 +57,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Public interfaces:
   - Versioned API baseline is active at `/api/v1`.
   - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
+  - Auth context endpoint under `v1` now rejects missing/invalid/expired tokens with `401`.
   - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
   - Minimal frontend public shell exists with route skeleton and no auth/business logic yet.
 - Error handling strategy:
@@ -93,9 +95,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T4 baseline):
+- Critical endpoints / operations (current T5 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
-  - `GET /api/v1/auth/context` -> auth context contract scaffold for T5 integration
+  - `GET /api/v1/auth/context` -> requires Bearer token, validates RS256 signature + issuer/audience/expiry + required tenant claim, returns normalized auth context (`subject`, `tenant_id`, `scopes`, `roles`)
   - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-aware base resource contract scaffold for T6/T7
 
 ## 5) Data & migrations (if applicable)
@@ -147,7 +149,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `GET /api/v1/health` public v1 health contract
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
-  - Broader happy-path + negative-403 policy remains for later security-sensitive endpoints.
+  - Auth validation coverage (T5) includes issuer/audience/expiry/signature/tenant-claim rejection tests and endpoint-level 401/200 behavior for `/api/v1/auth/context`.
+  - Broader tenant-authorization negative-403 policy remains for later security-sensitive endpoints (T6+).
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -175,7 +178,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Auth/permissions/tenant isolation:
   - Why risky: direct security boundary and cross-tenant exposure risk.
   - What to check: token validation, claim mapping, explicit scope checks, 403 negative tests.
-  - Where in the code: future API auth middleware/dependencies/services.
+  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/application/auth_context.py`.
 - Database migrations:
   - Why risky: data integrity and rollback risk.
   - What to check: migration plan, rollback steps, single-head Alembic state.
@@ -367,11 +370,45 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `GET /api/v1/tenants/{tenant_id}/resources`
   - invariants / assumptions:
     - Endpoint contracts remain backward compatible within v1.
-    - Auth context and tenant resource responses are contract scaffolds until T5/T6.
+    - `/api/v1/auth/context` is bearer-protected and returns 401 for invalid/missing/expired/missing-tenant-claim tokens.
+    - Tenant resource response remains scaffolded until T6/T7 tenant guardrails.
   - dependencies:
-    - `decider_api.api.schemas.v1`, `decider_api.application.*`.
+    - `decider_api.api.schemas.v1`, `decider_api.api.dependencies.auth`, `decider_api.application.*`.
   - tests:
-    - Covered by `services/api/tests/test_v1_http.py`.
+    - Covered by `services/api/tests/test_v1_http.py` and `services/api/tests/test_auth_context_authn.py`.
+- `services/api/src/decider_api/api/dependencies/auth.py` - FastAPI dependency for authenticated auth-context resolution.
+  - public surface / key exports:
+    - `get_token_validator()`
+    - `get_authenticated_auth_context()`
+  - invariants / assumptions:
+    - Never leak token parsing/validation internals in HTTP error detail.
+    - Converts token validation failures to `401 Invalid or expired token.`
+  - dependencies:
+    - `decider_api.infrastructure.auth.token_validator`, `decider_api.application.auth_context`, `decider_api.settings`.
+  - tests:
+    - Indirectly covered by `services/api/tests/test_auth_context_authn.py`.
+- `services/api/src/decider_api/infrastructure/auth/token_validator.py` - RS256 JWT validation against Keycloak-style JWKS.
+  - public surface / key exports:
+    - `KeycloakTokenValidator`
+    - `TokenValidationError`
+  - invariants / assumptions:
+    - Accepts only RS256 JWTs with matching `kid`.
+    - Enforces claim checks: `iss`, `aud`, `sub`, `exp`.
+    - Uses immutable parsed JWK registry and explicit error paths.
+  - dependencies:
+    - Python stdlib only (`base64`, `hashlib`, `json`, `time`).
+  - tests:
+    - Covered by `services/api/tests/test_auth_context_authn.py`.
+- `services/api/src/decider_api/settings.py` - App settings and auth configuration.
+  - public surface / key exports:
+    - `AppSettings`, `get_settings()`.
+  - invariants / assumptions:
+    - Reads auth config from env (`DECIDER_KEYCLOAK_ISSUER`, `DECIDER_KEYCLOAK_AUDIENCE`, `DECIDER_KEYCLOAK_JWKS_JSON`, `DECIDER_KEYCLOAK_TENANT_CLAIMS`).
+    - Settings are cached for stable per-process configuration.
+  - dependencies:
+    - OS env vars.
+  - tests:
+    - Indirectly validated via auth endpoint + validator tests.
 - `services/api/src/decider_api/api/schemas/v1.py` - Pydantic response schemas for v1 public API.
   - public surface / key exports:
     - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`.
@@ -410,14 +447,24 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `services/api/openapi/openapi.v1.json`.
   - tests:
     - Executed in smoke/local/ci backend verification flows.
-- `services/api/tests/test_v1_application_unit.py` - Application-layer immutability contract tests for v1 scaffolds.
+- `services/api/tests/test_v1_application_unit.py` - Application-layer mapping/immutability tests for v1 scaffolds.
   - public surface / key exports:
-    - Verifies `get_auth_context_response()` does not leak mutable shared list state.
+    - Verifies claims -> auth-context normalization (tenant/scopes/roles) is deterministic.
     - Verifies `list_tenant_base_resources()` returns fresh resource collections per call.
   - invariants / assumptions:
     - Contract provider functions must remain side-effect free and immutable across calls.
   - dependencies:
     - `decider_api.application.auth_context`, `decider_api.application.tenant_resources`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_auth_context_authn.py` - Auth validation tests for `/api/v1/auth/context`.
+  - public surface / key exports:
+    - Unit-level rejection tests for invalid issuer/audience/expired/signature/missing-tenant-claim tokens.
+    - HTTP-level 401/200 contract tests for missing/expired/missing-tenant-claim/valid bearer tokens.
+  - invariants / assumptions:
+    - Endpoint returns unified unauthorized error detail without leaking token internals.
+  - dependencies:
+    - `decider_api.infrastructure.auth.token_validator`, `decider_api.api.dependencies.auth`.
   - tests:
     - Executed in backend local/ci verification flows.
 
@@ -443,8 +490,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
 - Required env vars:
-  - None required for the current T4 contract scaffold (`/api/v1/health`, `/api/v1/auth/context`, `/api/v1/tenants/{tenant_id}/resources`).
-  - Future service/env requirements will be added in later tickets.
+  - `DECIDER_KEYCLOAK_ISSUER` (required for successful token validation in `/api/v1/auth/context`).
+  - `DECIDER_KEYCLOAK_AUDIENCE` (required for audience validation).
+  - `DECIDER_KEYCLOAK_JWKS_JSON` (required for signature validation, JSON with JWKS `keys`).
+  - `DECIDER_KEYCLOAK_TENANT_CLAIMS` (optional CSV, default: `tenant_id,tenant,org_id`).
+  - Without these values, auth-context requests are expected to return `401`.
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
   - If DOC gate fails, update `.agentkit/docs/PROJECT_MAP.md` in the same ticket.
@@ -463,6 +513,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-25 [T5] Implemented bearer auth for `GET /api/v1/auth/context` with RS256 JWT validation (issuer/audience/expiry/signature + required tenant claim), normalized claims mapping (tenant/scopes/roles), new auth tests, and updated OpenAPI contract.
 - 2026-02-24 [T4] Added versioned public API baseline under `/api/v1`, checked-in OpenAPI contract (`services/api/openapi/openapi.v1.json`), runtime/spec sync tests, and explicit v1 breaking-change policy.
 - 2026-02-24 [cleanup] Removed stray root file `backend` (`== local checks`) that was an accidental artifact and blocked creating a real `backend/` directory path.
 - 2026-02-24 [T3-fix] Switched `docker-compose.dev.yml` to a built `dev` image and added `docker/dev.Dockerfile` to preinstall `uv`, removing one-off pip install from verification evidence flow.

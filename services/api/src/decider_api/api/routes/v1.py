@@ -1,11 +1,13 @@
-from fastapi import APIRouter
+from typing import Annotated
 
+from fastapi import APIRouter, Depends
+
+from decider_api.api.dependencies.auth import get_authenticated_auth_context
 from decider_api.api.schemas.v1 import (
     AuthContextResponse,
     HealthResponse,
     TenantResourcesResponse,
 )
-from decider_api.application.auth_context import get_auth_context_response
 from decider_api.application.health import get_health_response
 from decider_api.application.tenant_resources import list_tenant_base_resources
 
@@ -17,9 +19,15 @@ def get_health_v1() -> dict[str, str]:
     return get_health_response()
 
 
-@router.get("/auth/context", response_model=AuthContextResponse)
-def get_auth_context_v1() -> dict[str, object]:
-    return get_auth_context_response()
+@router.get(
+    "/auth/context",
+    response_model=AuthContextResponse,
+    responses={401: {"description": "Unauthorized"}},
+)
+def get_auth_context_v1(
+    auth_context: Annotated[dict[str, object], Depends(get_authenticated_auth_context)],
+) -> dict[str, object]:
+    return auth_context
 
 
 @router.get(
