@@ -1,12 +1,22 @@
-# Decider API (T2 scaffold)
+# Decider API (T4 baseline)
 
-Minimal backend scaffold for ticket T2.
+Backend scaffold with versioned public API contract baseline for ticket T4.
 
 ## Run
 
 ```powershell
 uv run --directory services/api uvicorn decider_api.app:app --host 0.0.0.0 --port 8000
 ```
+
+## Public API (v1)
+
+- `GET /api/v1/health`
+- `GET /api/v1/auth/context`
+- `GET /api/v1/tenants/{tenant_id}/resources`
+
+OpenAPI source of truth:
+
+- `services/api/openapi/openapi.v1.json`
 
 ## Test
 

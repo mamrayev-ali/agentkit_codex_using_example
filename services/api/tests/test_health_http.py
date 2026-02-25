@@ -12,3 +12,13 @@ def test_health_endpoint_returns_exact_contract() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.smoke
+def test_v1_health_endpoint_returns_exact_contract() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

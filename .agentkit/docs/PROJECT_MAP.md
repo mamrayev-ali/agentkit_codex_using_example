@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend scaffold + Angular 21 frontend shell scaffold.
+  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract + Angular 21 frontend shell scaffold.
   - Target product stack (planned next): Keycloak, PostgreSQL, MongoDB, Celery.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -29,9 +29,14 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `.codex/` - Codex runtime configuration and MCP server setup.
 - `services/` - Product implementation area.
   - Current tracked state:
-    - `services/api/` contains the minimal FastAPI scaffold from T2.
+    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline.
     - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
-    - Public bootstrap endpoint exists: `GET /health` (contract-only response).
+    - Versioned public endpoints exist under `/api/v1`:
+      - `GET /api/v1/health`
+      - `GET /api/v1/auth/context`
+      - `GET /api/v1/tenants/{tenant_id}/resources`
+    - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
+    - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
   - Current tracked state:
     - Standalone Angular app with route skeleton: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
@@ -49,8 +54,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Workflow-first repository with strict documentation and verification gates.
   - Future service code should follow clean layering and explicit boundaries from local rules.
 - Public interfaces:
-  - Minimal public runtime endpoint exists at `GET /health` for liveness scaffold.
-  - OpenAPI contract baseline and broader API versioning remain planned for T4.
+  - Versioned API baseline is active at `/api/v1`.
+  - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
+  - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
   - Minimal frontend public shell exists with route skeleton and no auth/business logic yet.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
@@ -77,15 +83,20 @@ It explains what exists now, what contracts are enforced, and where new work sho
 
 ## 4) Public API surface (if applicable)
 - Where the API contract lives:
-  - Runtime-only contract for `GET /health` exists in code (`services/api/src/decider_api/api/routes/health.py`).
-  - Formal OpenAPI source of truth is still planned for T4.
+  - Canonical OpenAPI v1 contract: `services/api/openapi/openapi.v1.json`.
+  - Runtime implementation: `services/api/src/decider_api/app.py` + `services/api/src/decider_api/api/routes/v1.py`.
+  - Contract synchronization check: `services/api/tests/test_openapi_contract.py`.
 - Versioning strategy:
-  - Planned baseline: `/api/v1`.
-- Critical endpoints / operations (planned):
-  - health endpoint (`/health`) with exact response `{ "status": "ok" }`
-  - auth context endpoint
-  - tenant-scoped dossier operations
-  - export operation with scope + tenant guardrails
+  - Active public baseline: `/api/v1`.
+  - Compatibility endpoint `GET /health` is intentionally excluded from OpenAPI schema.
+- Breaking-change policy (public API):
+  - `v1` accepts additive changes only (new optional fields/endpoints).
+  - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
+  - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
+- Critical endpoints / operations (current T4 baseline):
+  - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
+  - `GET /api/v1/auth/context` -> auth context contract scaffold for T5 integration
+  - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-aware base resource contract scaffold for T6/T7
 
 ## 5) Data & migrations (if applicable)
 - Database(s):
@@ -131,7 +142,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
-  - Current implemented minimum (T2): in-process HTTP smoke for `GET /health` with status `200` and exact JSON `{ "status": "ok" }`.
+  - Current implemented minimum (T4): in-process HTTP smoke for:
+    - `GET /health` legacy compatibility contract
+    - `GET /api/v1/health` public v1 health contract
+    - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
+  - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
   - Broader happy-path + negative-403 policy remains for later security-sensitive endpoints.
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
@@ -168,7 +183,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Public API contracts:
   - Why risky: client compatibility and versioning stability.
   - What to check: contract versioning, backward compatibility, change notes.
-  - Where in the code: future OpenAPI specs and API routers.
+  - Where in the code: `services/api/openapi/openapi.v1.json`, `services/api/src/decider_api/api/routes/v1.py`, `services/api/tests/test_openapi_contract.py`.
 - Security headers/CORS:
   - Why risky: browser/session attack surface.
   - What to check: strict allow-lists and production-safe defaults.
@@ -325,15 +340,47 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Generated/updated by `uv sync --directory services/api`.
   - tests:
     - Indirectly validated by `verify-smoke` and `verify-local` in backend profile.
+- `services/api/openapi/openapi.v1.json` - Checked-in public API contract source of truth.
+  - public surface / key exports:
+    - OpenAPI 3.1 document for `/api/v1` baseline endpoints.
+  - invariants / assumptions:
+    - Must stay synchronized with `app.openapi()` output.
+    - Must include only `/api/v1/*` public paths.
+  - dependencies:
+    - Generated from runtime app (`decider_api.app`).
+  - tests:
+    - Validated by `services/api/tests/test_openapi_contract.py`.
 - `services/api/src/decider_api/app.py` - FastAPI entrypoint and app factory.
   - public surface / key exports:
     - `create_app()` and module-level `app` ASGI object.
   - invariants / assumptions:
-    - Registers only `/health` in T2 scope.
+    - Registers versioned public router under `/api/v1`.
+    - Keeps legacy `/health` compatibility endpoint outside OpenAPI schema.
   - dependencies:
-    - `decider_api.settings`, `decider_api.api.routes.health`.
+    - `decider_api.settings`, `decider_api.api.routes.health`, `decider_api.api.routes.v1`.
   - tests:
-    - Covered by `services/api/tests/test_health_http.py`.
+    - Covered by `services/api/tests/test_health_http.py` and `services/api/tests/test_openapi_contract.py`.
+- `services/api/src/decider_api/api/routes/v1.py` - Public v1 endpoint router.
+  - public surface / key exports:
+    - `GET /api/v1/health`
+    - `GET /api/v1/auth/context`
+    - `GET /api/v1/tenants/{tenant_id}/resources`
+  - invariants / assumptions:
+    - Endpoint contracts remain backward compatible within v1.
+    - Auth context and tenant resource responses are contract scaffolds until T5/T6.
+  - dependencies:
+    - `decider_api.api.schemas.v1`, `decider_api.application.*`.
+  - tests:
+    - Covered by `services/api/tests/test_v1_http.py`.
+- `services/api/src/decider_api/api/schemas/v1.py` - Pydantic response schemas for v1 public API.
+  - public surface / key exports:
+    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`.
+  - invariants / assumptions:
+    - Defines stable response shape used by OpenAPI contract.
+  - dependencies:
+    - Pydantic and FastAPI response modeling.
+  - tests:
+    - Indirectly validated by route HTTP tests and OpenAPI contract sync tests.
 - `services/api/src/decider_api/application/health.py` - Health contract provider.
   - public surface / key exports:
     - `get_health_response()` returns exact payload contract.
@@ -345,7 +392,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Covered by `services/api/tests/test_health_unit.py`.
 - `services/api/src/decider_api/api/routes/health.py` - Health route handler.
   - public surface / key exports:
-    - `GET /health` endpoint.
+    - Legacy `GET /health` compatibility endpoint.
   - invariants / assumptions:
     - Must not call DB or external services.
     - Must return `200` with exact JSON payload contract.
@@ -353,6 +400,26 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.application.health`.
   - tests:
     - Covered by HTTP smoke test.
+- `services/api/tests/test_openapi_contract.py` - OpenAPI contract validation tests.
+  - public surface / key exports:
+    - File validation checks for `openapi.v1.json`.
+    - Runtime schema sync assertion (`app.openapi()` equals checked-in contract).
+  - invariants / assumptions:
+    - v1 contract must remain path-scoped to `/api/v1/*`.
+  - dependencies:
+    - `services/api/openapi/openapi.v1.json`.
+  - tests:
+    - Executed in smoke/local/ci backend verification flows.
+- `services/api/tests/test_v1_application_unit.py` - Application-layer immutability contract tests for v1 scaffolds.
+  - public surface / key exports:
+    - Verifies `get_auth_context_response()` does not leak mutable shared list state.
+    - Verifies `list_tenant_base_resources()` returns fresh resource collections per call.
+  - invariants / assumptions:
+    - Contract provider functions must remain side-effect free and immutable across calls.
+  - dependencies:
+    - `decider_api.application.auth_context`, `decider_api.application.tenant_resources`.
+  - tests:
+    - Executed in backend local/ci verification flows.
 
 ## 10) Runbook (minimal)
 - How to run locally:
@@ -376,7 +443,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
 - Required env vars:
-  - None required for the current minimal `/health` scaffold.
+  - None required for the current T4 contract scaffold (`/api/v1/health`, `/api/v1/auth/context`, `/api/v1/tenants/{tenant_id}/resources`).
   - Future service/env requirements will be added in later tickets.
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
@@ -390,11 +457,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - run `uv run --directory services/api pytest -q`
   - Start API manually:
     - `uv run --directory services/api uvicorn decider_api.app:app --host 0.0.0.0 --port 8000`
-    - `GET /health` must return `{ "status": "ok" }`
+    - `GET /api/v1/health` must return `{ "status": "ok" }`
+    - checked-in contract file is `services/api/openapi/openapi.v1.json`
 
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-24 [T4] Added versioned public API baseline under `/api/v1`, checked-in OpenAPI contract (`services/api/openapi/openapi.v1.json`), runtime/spec sync tests, and explicit v1 breaking-change policy.
 - 2026-02-24 [cleanup] Removed stray root file `backend` (`== local checks`) that was an accidental artifact and blocked creating a real `backend/` directory path.
 - 2026-02-24 [T3-fix] Switched `docker-compose.dev.yml` to a built `dev` image and added `docker/dev.Dockerfile` to preinstall `uv`, removing one-off pip install from verification evidence flow.
 - 2026-02-24 [T3-policy] Formalized container-first evidence contract: host `verify.ps1` delegates to `docker compose ... run --rm dev make verify-*`; added loop-guard requirement (`IN_DEV_CONTAINER=1`) and updated runbook/docs accordingly.
