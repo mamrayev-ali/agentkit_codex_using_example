@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract, Keycloak-style RS256 bearer token validation for `/api/v1/auth/context`, and Angular 21 frontend shell scaffold.
+  - Current implemented stack: Python/FastAPI backend with versioned OpenAPI v1 contract, Keycloak-style RS256 bearer token validation, T6 tenant guardrails for tenant-bound endpoint access, and Angular 21 frontend shell scaffold.
   - Target product stack (planned next): PostgreSQL, MongoDB, Celery, full Keycloak/RBAC rollout across tenant-guarded endpoints.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -29,13 +29,14 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `.codex/` - Codex runtime configuration and MCP server setup.
 - `services/` - Product implementation area.
   - Current tracked state:
-    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline and T5 auth validation slice.
+    - `services/api/` contains the FastAPI scaffold from T2 plus T4 public API contract baseline, T5 auth validation slice, and T6 tenant isolation guardrails.
     - Layered package boundary is present: `api`, `application`, `domain`, `infrastructure`.
     - Versioned public endpoints exist under `/api/v1`:
       - `GET /api/v1/health`
       - `GET /api/v1/auth/context`
       - `GET /api/v1/tenants/{tenant_id}/resources`
-    - `/api/v1/auth/context` now enforces `Authorization: Bearer <JWT>` and validates RS256 signature + issuer + audience + expiry + required tenant claim against configured Keycloak-like settings/JWKS.
+    - `/api/v1/auth/context` enforces `Authorization: Bearer <JWT>` and validates RS256 signature + issuer + audience + expiry + required tenant claim against configured Keycloak-like settings/JWKS.
+    - `/api/v1/tenants/{tenant_id}/resources` now enforces bearer auth and blocks cross-tenant access with `403 Forbidden`.
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
@@ -57,7 +58,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Public interfaces:
   - Versioned API baseline is active at `/api/v1`.
   - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
-  - Auth context endpoint under `v1` now rejects missing/invalid/expired tokens with `401`.
+  - Auth context endpoint under `v1` rejects missing/invalid/expired tokens with `401`.
+  - Tenant-bound resources reject cross-tenant access with `403`.
   - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
   - Minimal frontend public shell exists with route skeleton and no auth/business logic yet.
 - Error handling strategy:
@@ -95,10 +97,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T5 baseline):
+- Critical endpoints / operations (current T6 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
   - `GET /api/v1/auth/context` -> requires Bearer token, validates RS256 signature + issuer/audience/expiry + required tenant claim, returns normalized auth context (`subject`, `tenant_id`, `scopes`, `roles`)
-  - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-aware base resource contract scaffold for T6/T7
+  - `GET /api/v1/tenants/{tenant_id}/resources` -> requires Bearer token, same-tenant access returns `200`, cross-tenant access returns `403`
 
 ## 5) Data & migrations (if applicable)
 - Database(s):
@@ -144,13 +146,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
 - API e2e smoke definition:
-  - Current implemented minimum (T4): in-process HTTP smoke for:
+  - Current implemented minimum (T6): in-process HTTP smoke for:
     - `GET /health` legacy compatibility contract
     - `GET /api/v1/health` public v1 health contract
+    - `GET /api/v1/tenants/{tenant_id}/resources` with valid same-tenant token -> `200`
+    - `GET /api/v1/tenants/{tenant_id}/resources` with valid cross-tenant token -> `403`
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
   - Auth validation coverage (T5) includes issuer/audience/expiry/signature/tenant-claim rejection tests and endpoint-level 401/200 behavior for `/api/v1/auth/context`.
-  - Broader tenant-authorization negative-403 policy remains for later security-sensitive endpoints (T6+).
+  - T6 coverage adds explicit negative `403` cross-tenant checks for tenant-bound resources.
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -178,7 +182,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Auth/permissions/tenant isolation:
   - Why risky: direct security boundary and cross-tenant exposure risk.
   - What to check: token validation, claim mapping, explicit scope checks, 403 negative tests.
-  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/application/auth_context.py`.
+  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/application/auth_context.py`, `services/api/src/decider_api/domain/tenant_guard.py`, `services/api/src/decider_api/api/routes/v1.py`.
 - Database migrations:
   - Why risky: data integrity and rollback risk.
   - What to check: migration plan, rollback steps, single-head Alembic state.
@@ -371,9 +375,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - invariants / assumptions:
     - Endpoint contracts remain backward compatible within v1.
     - `/api/v1/auth/context` is bearer-protected and returns 401 for invalid/missing/expired/missing-tenant-claim tokens.
-    - Tenant resource response remains scaffolded until T6/T7 tenant guardrails.
+    - `/api/v1/tenants/{tenant_id}/resources` is bearer-protected and must enforce tenant match (`token tenant == path tenant`), otherwise return `403`.
   - dependencies:
-    - `decider_api.api.schemas.v1`, `decider_api.api.dependencies.auth`, `decider_api.application.*`.
+    - `decider_api.api.schemas.v1`, `decider_api.api.dependencies.auth`, `decider_api.application.*`, `decider_api.domain.tenant_guard`.
   - tests:
     - Covered by `services/api/tests/test_v1_http.py` and `services/api/tests/test_auth_context_authn.py`.
 - `services/api/src/decider_api/api/dependencies/auth.py` - FastAPI dependency for authenticated auth-context resolution.
@@ -467,6 +471,26 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.infrastructure.auth.token_validator`, `decider_api.api.dependencies.auth`.
   - tests:
     - Executed in backend local/ci verification flows.
+- `services/api/src/decider_api/domain/tenant_guard.py` - Tenant isolation policy checks for tenant-bound endpoints.
+  - public surface / key exports:
+    - `is_tenant_access_allowed()`
+  - invariants / assumptions:
+    - Deny-by-default when actor tenant is missing or different from requested tenant.
+  - dependencies:
+    - none (pure function).
+  - tests:
+    - Covered by `services/api/tests/test_tenant_guard_unit.py`.
+- `services/api/tests/test_tenant_guard_unit.py` - Unit tests for tenant guard policy.
+  - public surface / key exports:
+    - same-tenant allow behavior
+    - cross-tenant deny behavior
+    - missing-tenant deny behavior
+  - invariants / assumptions:
+    - Guardrail policy must stay deterministic and deny-by-default.
+  - dependencies:
+    - `decider_api.domain.tenant_guard`.
+  - tests:
+    - Executed in backend local/ci verification flows.
 
 ## 10) Runbook (minimal)
 - How to run locally:
@@ -513,6 +537,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-25 [T6] Enforced tenant isolation guardrails on `GET /api/v1/tenants/{tenant_id}/resources` with backend bearer auth dependency and explicit cross-tenant `403` denial tests.
 - 2026-02-25 [T5] Implemented bearer auth for `GET /api/v1/auth/context` with RS256 JWT validation (issuer/audience/expiry/signature + required tenant claim), normalized claims mapping (tenant/scopes/roles), new auth tests, and updated OpenAPI contract.
 - 2026-02-24 [T4] Added versioned public API baseline under `/api/v1`, checked-in OpenAPI contract (`services/api/openapi/openapi.v1.json`), runtime/spec sync tests, and explicit v1 breaking-change policy.
 - 2026-02-24 [cleanup] Removed stray root file `backend` (`== local checks`) that was an accidental artifact and blocked creating a real `backend/` directory path.
