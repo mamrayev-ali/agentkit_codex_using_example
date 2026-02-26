@@ -53,3 +53,14 @@ def has_module_access(*, module_key: str, enabled_modules: Sequence[str]) -> boo
 
 def is_admin_actor(*, roles: Sequence[str], scopes: Sequence[str]) -> bool:
     return bool(_ADMIN_ROLES.intersection(roles) or _ADMIN_SCOPES.intersection(scopes))
+
+
+def has_scope(*, required_scope: str, scopes: Sequence[str]) -> bool:
+    normalized_required_scope = required_scope.strip().lower()
+    if not normalized_required_scope:
+        return False
+
+    normalized_scopes = {
+        scope.strip().lower() for scope in scopes if isinstance(scope, str) and scope.strip()
+    }
+    return normalized_required_scope in normalized_scopes

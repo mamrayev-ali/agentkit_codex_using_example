@@ -7,6 +7,7 @@ from decider_api.api.schemas.v1 import (
     AuthContextResponse,
     EntitlementsResponse,
     EntitlementsUpdateRequest,
+    ExportResponse,
     HealthResponse,
     TenantResourcesResponse,
 )
@@ -15,12 +16,18 @@ from decider_api.application.entitlements import (
     resolve_modules_from_auth_context,
     update_managed_modules,
 )
+from decider_api.application.exports import (
+    create_export_result,
+    record_export_audit_event,
+)
 from decider_api.application.health import get_health_response
 from decider_api.application.tenant_resources import list_tenant_base_resources
-from decider_api.domain.permissions import has_module_access, is_admin_actor
+from decider_api.domain.permissions import has_module_access, has_scope, is_admin_actor
 from decider_api.domain.tenant_guard import is_tenant_access_allowed
 
 router = APIRouter(tags=["v1"])
+
+_EXPORT_DATA_SCOPE = "export:data"
 
 
 def _coerce_string_list(value: object) -> list[str]:
@@ -108,6 +115,61 @@ def get_tenant_resources_v1(
         )
 
     return list_tenant_base_resources(tenant_id)
+
+
+@router.post(
+    "/tenants/{tenant_id}/exports",
+    response_model=ExportResponse,
+    responses={
+        401: {"description": "Invalid or expired token."},
+        403: {"description": "Forbidden"},
+    },
+)
+def post_tenant_export_v1(
+    tenant_id: str,
+    auth_context: Annotated[dict[str, object], Depends(get_authenticated_auth_context)],
+) -> dict[str, object]:
+    actor_subject = auth_context.get("subject")
+    if not isinstance(actor_subject, str) or not actor_subject:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+        )
+
+    actor_tenant_id = auth_context.get("tenant_id")
+    normalized_actor_tenant_id = actor_tenant_id if isinstance(actor_tenant_id, str) else None
+    if not is_tenant_access_allowed(
+        requested_tenant_id=tenant_id,
+        actor_tenant_id=normalized_actor_tenant_id,
+    ):
+        record_export_audit_event(
+            tenant_id=tenant_id,
+            actor_subject=actor_subject,
+            outcome="forbidden",
+            reason="tenant_mismatch",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+    scopes = _coerce_string_list(auth_context.get("scopes"))
+    if not has_scope(required_scope=_EXPORT_DATA_SCOPE, scopes=scopes):
+        record_export_audit_event(
+            tenant_id=tenant_id,
+            actor_subject=actor_subject,
+            outcome="forbidden",
+            reason="missing_scope",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+    return create_export_result(
+        tenant_id=tenant_id,
+        actor_subject=actor_subject,
+    )
 
 
 @router.get(

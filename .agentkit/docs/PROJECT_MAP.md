@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, and T7 entitlement-management APIs + Angular 21 shell with backend-driven module visibility logic.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, and T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events) + Angular 21 shell with backend-driven module visibility logic.
   - Target product stack (planned next): PostgreSQL, MongoDB, Celery.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -35,9 +35,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - `GET /api/v1/health`
       - `GET /api/v1/auth/context`
       - `GET /api/v1/tenants/{tenant_id}/resources`
+      - `POST /api/v1/tenants/{tenant_id}/exports`
       - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}`
       - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
     - Token validation (`RS256` + `iss/aud/exp`) and tenant guard checks are enforced server-side.
+    - Export endpoint enforces `export:data` scope and records metadata-only audit events for success/forbidden attempts.
     - Entitlement updates return audit metadata payloads (`event_id`, actor/target, tenant, timestamp).
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
@@ -63,6 +65,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
   - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
   - Auth context response includes roles/scopes/module entitlements.
+  - Tenant export API is scope-gated (`export:data`) and emits metadata-only audit events (no export payload data).
   - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
   - Frontend shell consumes backend entitlement shape for module visibility decisions.
 - Error handling strategy:
@@ -83,6 +86,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Tenant isolation is mandatory.
   - Backend authorization is authoritative.
   - Admin entitlement mutations are auditable actions with metadata output.
+  - Export actions (success and forbidden attempts) are auditable without payload leakage.
   - Sensitive data handling must avoid PII leakage in logs/artifacts.
 - Invariants:
   - Any cross-tenant access is a security incident.
@@ -101,10 +105,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T7 baseline):
+- Critical endpoints / operations (current T9 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
   - `GET /api/v1/auth/context` -> authenticated context with `tenant_id`, `roles`, `scopes`, `module_entitlements`
   - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-scoped access + entitlement gate (`dossiers` module)
+  - `POST /api/v1/tenants/{tenant_id}/exports` -> tenant-scoped access + required `export:data` scope + metadata-only audit event
   - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement read
   - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement update + audit metadata
 
@@ -158,6 +163,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `GET /api/v1/health` public v1 health contract
     - auth-context token validation and claim mapping paths
     - tenant guard negative path (`403`) and entitlement admin negative/positive paths
+    - export negative (`403` missing scope) and export positive (`200` with scope + tenant) paths
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
 - Windows evidence policy (source of truth for local verification on this repo):
@@ -187,7 +193,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Auth/permissions/tenant isolation:
   - Why risky: direct security boundary and cross-tenant exposure risk.
   - What to check: token validation, claim mapping, explicit scope checks, module entitlement enforcement, 403 negative tests.
-  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/domain/{tenant_guard,permissions}.py`, `services/api/src/decider_api/application/entitlements.py`.
+  - Where in the code: `services/api/src/decider_api/api/dependencies/auth.py`, `services/api/src/decider_api/infrastructure/auth/token_validator.py`, `services/api/src/decider_api/domain/{tenant_guard,permissions}.py`, `services/api/src/decider_api/application/{entitlements,exports}.py`.
 - Database migrations:
   - Why risky: data integrity and rollback risk.
   - What to check: migration plan, rollback steps, single-head Alembic state.
@@ -387,18 +393,20 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `GET /api/v1/health`
     - `GET /api/v1/auth/context`
     - `GET /api/v1/tenants/{tenant_id}/resources`
+    - `POST /api/v1/tenants/{tenant_id}/exports`
     - `GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
   - invariants / assumptions:
     - Endpoint contracts remain backward compatible within v1.
-    - Tenant scope and module entitlement checks are enforced server-side.
+    - Tenant scope, module entitlement checks, and export scope checks are enforced server-side.
     - Entitlement mutation endpoints are admin-only.
+    - Export route emits metadata-only audit events without payload content.
   - dependencies:
     - `decider_api.api.schemas.v1`, `decider_api.application.*`, `decider_api.domain.*`.
   - tests:
     - Covered by `services/api/tests/test_v1_http.py`.
 - `services/api/src/decider_api/api/schemas/v1.py` - Pydantic request/response schemas for v1 public API.
   - public surface / key exports:
-    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`, `EntitlementsUpdateRequest`, `EntitlementsResponse`.
+    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`, `ExportResponse`, `EntitlementsUpdateRequest`, `EntitlementsResponse`.
   - invariants / assumptions:
     - Defines stable response shape used by OpenAPI contract.
   - dependencies:
@@ -446,9 +454,21 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.domain.permissions`.
   - tests:
     - Covered by `services/api/tests/test_permissions_unit.py` and HTTP route tests.
+- `services/api/src/decider_api/application/exports.py` - In-memory export workflow/audit metadata builder.
+  - public surface / key exports:
+    - Creates export response payload with metadata-only audit block.
+    - Records export audit events for successful and forbidden attempts.
+    - Lists/resets in-memory audit events for deterministic tests.
+  - invariants / assumptions:
+    - Export response does not include exported dataset payload.
+    - Audit events carry metadata only (`event_id`, actor, tenant, outcome, reason, timestamp).
+  - dependencies:
+    - none (in-memory state + standard library only).
+  - tests:
+    - Covered by `services/api/tests/test_exports_application_unit.py` and HTTP route tests.
 - `services/api/src/decider_api/domain/permissions.py` - Permission and module policy helpers.
   - public surface / key exports:
-    - Supported module constants, module normalization, admin check, default module mapping.
+    - Supported module constants, module normalization, admin check, default module mapping, scope checks.
   - invariants / assumptions:
     - Unknown modules are rejected.
     - Admin decision uses role/scope allow-list.
@@ -468,7 +488,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Executed in backend local/ci verification flows.
 - `services/api/tests/test_v1_http.py` - HTTP route authorization tests.
   - public surface / key exports:
-    - Verifies tenant guard, token auth failures, admin entitlement mutation paths, and 403 negative cases.
+    - Verifies tenant guard, token auth failures, export scope/tenant gates with audit side effects, admin entitlement mutation paths, and 403 negative cases.
   - invariants / assumptions:
     - Server-side permission checks remain authoritative.
   - dependencies:
@@ -477,11 +497,21 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Executed in backend local/ci verification flows.
 - `services/api/tests/test_permissions_unit.py` - Unit tests for permission policy helpers and entitlement resolution.
   - public surface / key exports:
-    - Verifies default module mapping, admin checks, module validation, and managed entitlement precedence.
+    - Verifies default module mapping, admin checks, scope checks, module validation, and managed entitlement precedence.
   - invariants / assumptions:
     - Permission policy remains deterministic and explicit.
   - dependencies:
     - `decider_api.domain.permissions`, `decider_api.application.entitlements`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_exports_application_unit.py` - Unit tests for export workflow and audit metadata behavior.
+  - public surface / key exports:
+    - Verifies metadata-only export response contract.
+    - Verifies forbidden-attempt audit recording and defensive-copy behavior.
+  - invariants / assumptions:
+    - Export audit events remain deterministic after state reset.
+  - dependencies:
+    - `decider_api.application.exports`.
   - tests:
     - Executed in backend local/ci verification flows.
 
@@ -532,6 +562,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-26 [T9] Added `POST /api/v1/tenants/{tenant_id}/exports` with strict tenant + `export:data` scope gate, metadata-only export audit events for success/forbidden attempts, smoke coverage for positive/negative export flow, and synced OpenAPI v1 contract.
 - 2026-02-25 [T7] Added server-side entitlement management APIs (`GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`), module-level access enforcement on tenant resources, audit metadata for entitlement mutations, and frontend module visibility alignment with backend `module_entitlements` response.
 - 2026-02-25 [mcp-fix] Updated project MCP config (`.codex/config.toml`) for filesystem server startup compatibility in restricted-network environments (direct `node` entrypoint + repo absolute allowed-directory path).
 - 2026-02-25 [T6] Enforced tenant isolation guardrails on `GET /api/v1/tenants/{tenant_id}/resources` with backend bearer auth dependency, explicit cross-tenant `403` denial tests, and aligned backend test imports after rebase on `main`.
