@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), and T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint) + Angular 21 shell with backend-driven module visibility logic.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic.
   - Target product stack (planned next): PostgreSQL, MongoDB, Celery broker/runtime deployment hardening.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -47,6 +47,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - Source adapter protocol (`domain/source_adapter.py`)
       - Retry/timeout HTTP client (`infrastructure/ingestion/http_client.py`)
       - Task orchestration and queueing foundation (`infrastructure/ingestion/{celery_app,tasks,worker}.py`)
+    - T11 adds observability foundation modules:
+      - Correlation-id lifecycle helpers (`infrastructure/observability/correlation.py`)
+      - Structured JSON logging formatter/filter (`infrastructure/observability/logging.py`)
+      - In-memory Prometheus-text metrics registry (`infrastructure/observability/metrics.py`)
+      - Exception reporting hook abstraction (`infrastructure/observability/exceptions.py`)
     - Initial SQL migration set for dossier core exists at `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`.
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
@@ -82,7 +87,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - No placeholder pass paths are allowed.
 - Logging/observability conventions:
   - Agent actions must be recorded in `logs/agent/<ticket>.md` with structured tags.
-  - Product observability conventions are documented in local rules and planned roadmap tickets.
+  - Request lifecycle logs are emitted as structured JSON and include correlation id, method, route, status, and duration.
+  - Correlation id is propagated via `X-Correlation-ID` request/response header (overridable by settings).
+  - `/metrics` endpoint exposes Prometheus-text counters/gauges and is intentionally excluded from OpenAPI schema.
+  - Exception reporting hook logs unhandled request exceptions with safe metadata only (no tokens/PII payloads).
 
 ## 3) Domain map (important concepts)
 - Core domain entities (planned):
@@ -184,6 +192,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
     - HTTP retry/timeout behavior (`services/api/tests/test_http_client_unit.py`)
     - queue enqueue + eager processing and ingestion metadata flow (`services/api/tests/test_ingestion_pipeline_unit.py`)
+  - T11 observability coverage includes:
+    - correlation-id normalization/generation and structured formatter behavior (`services/api/tests/test_observability_unit.py`)
+    - request correlation header propagation, `/metrics` exposure, and request lifecycle log fields (`services/api/tests/test_observability_http.py`)
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -403,13 +414,62 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `services/api/src/decider_api/app.py` - FastAPI entrypoint and app factory.
   - public surface / key exports:
     - `create_app()` and module-level `app` ASGI object.
+    - Runtime observability middleware (correlation propagation, request logging, metrics recording).
   - invariants / assumptions:
     - Registers versioned public router under `/api/v1`.
     - Keeps legacy `/health` compatibility endpoint outside OpenAPI schema.
+    - Exposes `/metrics` with `include_in_schema=False` to preserve v1 OpenAPI path scope.
   - dependencies:
-    - `decider_api.settings`, `decider_api.api.routes.health`, `decider_api.api.routes.v1`.
+    - `decider_api.settings`, `decider_api.api.routes.health`, `decider_api.api.routes.v1`, `decider_api.infrastructure.observability.*`.
   - tests:
-    - Covered by `services/api/tests/test_health_http.py` and `services/api/tests/test_openapi_contract.py`.
+    - Covered by `services/api/tests/test_health_http.py`, `services/api/tests/test_openapi_contract.py`, and `services/api/tests/test_observability_http.py`.
+- `services/api/src/decider_api/settings.py` - Environment-backed runtime settings for API, ingestion, and observability.
+  - public surface / key exports:
+    - `AppSettings`, `get_settings()`.
+  - invariants / assumptions:
+    - Observability toggles default to safe-on values (`request_logging`, `metrics`, `exception_reporting`).
+    - Correlation header name is configurable via env.
+  - dependencies:
+    - OS environment variables and `functools.lru_cache`.
+  - tests:
+    - Indirectly validated by HTTP and unit tests that rely on observability behavior.
+- `services/api/src/decider_api/infrastructure/observability/correlation.py` - Correlation-id normalization, generation, and request-local context.
+  - public surface / key exports:
+    - `resolve_correlation_id()`, `normalize_correlation_id()`, `set_correlation_id()`, `get_correlation_id()`, `reset_correlation_id()`.
+  - invariants / assumptions:
+    - Only safe header values (`[A-Za-z0-9._-]`, max length 128) are accepted as incoming correlation ids.
+  - dependencies:
+    - stdlib `contextvars`, `uuid`, and regex.
+  - tests:
+    - Covered by `services/api/tests/test_observability_unit.py`.
+- `services/api/src/decider_api/infrastructure/observability/logging.py` - Structured JSON logging configuration and formatter/filter.
+  - public surface / key exports:
+    - `configure_structured_logging()`, `JsonLogFormatter`, `CorrelationIdFilter`.
+  - invariants / assumptions:
+    - Structured logs include timestamp, level, logger, event, message, and correlation id.
+    - Non-primitive extra fields are stringified to preserve JSON serialization.
+  - dependencies:
+    - stdlib `logging`, `json`, and correlation context helper.
+  - tests:
+    - Covered by `services/api/tests/test_observability_unit.py`.
+- `services/api/src/decider_api/infrastructure/observability/metrics.py` - In-memory HTTP metrics registry with Prometheus text rendering.
+  - public surface / key exports:
+    - `InMemoryMetricsRegistry.record_request()`, `InMemoryMetricsRegistry.render_prometheus()`.
+  - invariants / assumptions:
+    - Metrics are lock-protected and include request counters, duration sum, and uptime gauge.
+  - dependencies:
+    - stdlib `collections.Counter`, `threading.Lock`, and `time.monotonic`.
+  - tests:
+    - Covered by `services/api/tests/test_observability_http.py`.
+- `services/api/src/decider_api/infrastructure/observability/exceptions.py` - Exception reporting hook abstraction.
+  - public surface / key exports:
+    - `build_exception_reporter()`, `LoggingExceptionReporter`, `NoopExceptionReporter`.
+  - invariants / assumptions:
+    - Reporter logs metadata-only fields (`correlation_id`, route, method, error type) and avoids request payload/token logging.
+  - dependencies:
+    - stdlib `logging` and dataclasses.
+  - tests:
+    - Covered by `services/api/tests/test_observability_unit.py`.
 - `services/api/src/decider_api/api/routes/v1.py` - Public v1 endpoint router.
   - public surface / key exports:
     - `GET /api/v1/health`
@@ -716,6 +776,30 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.infrastructure.ingestion.{celery_app,worker,tasks}`.
   - tests:
     - Executed in backend local/ci verification flows.
+- `services/api/tests/test_observability_http.py` - HTTP tests for observability middleware behavior.
+  - public surface / key exports:
+    - Verifies correlation-id request/response propagation.
+    - Verifies `/metrics` exposure and baseline metric labels.
+    - Verifies request lifecycle log records include correlation id metadata.
+  - invariants / assumptions:
+    - Correlation header remains stable across request/response lifecycle.
+    - Metrics route stays outside OpenAPI schema.
+  - dependencies:
+    - `decider_api.app`, `fastapi.testclient`, observability middleware.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_observability_unit.py` - Unit tests for observability helpers.
+  - public surface / key exports:
+    - Verifies correlation-id normalization/generation.
+    - Verifies structured JSON formatter fields.
+    - Verifies exception reporter factory behavior.
+  - invariants / assumptions:
+    - Unsafe correlation-id values are rejected.
+    - Exception reporter can be disabled via noop implementation.
+  - dependencies:
+    - `decider_api.infrastructure.observability.*`.
+  - tests:
+    - Executed in backend local/ci verification flows.
 
 ## 10) Runbook (minimal)
 - How to run locally:
@@ -752,6 +836,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `DECIDER_INGESTION_HTTP_TIMEOUT_SECONDS` (default `5.0`)
     - `DECIDER_INGESTION_HTTP_MAX_RETRIES` (default `2`)
     - `DECIDER_INGESTION_HTTP_BACKOFF_SECONDS` (default `0.25`)
+  - Observability runtime tuning:
+    - `DECIDER_OBSERVABILITY_LOG_LEVEL` (default `INFO`)
+    - `DECIDER_OBSERVABILITY_CORRELATION_HEADER` (default `X-Correlation-ID`)
+    - `DECIDER_OBSERVABILITY_ENABLE_REQUEST_LOGGING` (default `true`)
+    - `DECIDER_OBSERVABILITY_ENABLE_METRICS` (default `true`)
+    - `DECIDER_OBSERVABILITY_ENABLE_EXCEPTION_REPORTING` (default `true`)
   - Run Celery ingestion worker (non-eager path):
     - `uv run --directory services/api celery -A decider_api.infrastructure.ingestion.worker:celery_app worker --loglevel=INFO`
 - Troubleshooting:
@@ -774,10 +864,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `uv run --directory services/api pytest -q services/api/tests/test_dossier_repository_integration.py services/api/tests/test_search_request_repository_integration.py`
   - Validate T10 ingestion modules/tests:
     - `uv run --directory services/api pytest -q services/api/tests/test_url_policy_unit.py services/api/tests/test_http_client_unit.py services/api/tests/test_ingestion_pipeline_unit.py`
+  - Validate T11 observability modules/tests:
+    - `uv run --directory services/api pytest -q services/api/tests/test_observability_http.py services/api/tests/test_observability_unit.py`
+  - If `/metrics` is missing in local run, verify `DECIDER_OBSERVABILITY_ENABLE_METRICS=true` and restart API process.
+  - If correlation id header is not echoed, verify `DECIDER_OBSERVABILITY_CORRELATION_HEADER` value and ensure requests pass through FastAPI middleware.
 
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-26 [T11] Added observability guardrails: structured request lifecycle logging with correlation-id propagation, `/metrics` endpoint (excluded from OpenAPI schema), exception reporting hook abstraction, observability settings, and dedicated HTTP/unit test coverage.
 - 2026-02-26 [T10-celery] Added Celery runtime dependency and worker entrypoint (`infrastructure/ingestion/worker.py`), plus non-eager queue-path test coverage and runbook updates.
 - 2026-02-26 [T10] Added ingestion foundation modules: SSRF-safe URL policy, source-adapter protocol, retry/timeout HTTP client, Celery/eager queue skeleton, ingestion task orchestration, and unit coverage for URL policy, HTTP retries, and enqueue/process flow.
 - 2026-02-26 [T9] Added `POST /api/v1/tenants/{tenant_id}/exports` with strict tenant + `export:data` scope gate, metadata-only export audit events for success/forbidden attempts, smoke coverage for positive/negative export flow, and synced OpenAPI v1 contract.

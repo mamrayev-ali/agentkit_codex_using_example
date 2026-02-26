@@ -56,3 +56,28 @@ uv run --directory services/api celery -A decider_api.infrastructure.ingestion.w
 
 In this mode, ingestion jobs are queued with Celery `.delay(...)` instead of being
 executed synchronously in-process.
+
+## Observability guardrails (T11)
+
+T11 adds observability modules under
+`services/api/src/decider_api/infrastructure/observability/`:
+
+- correlation-id normalization and request context (`correlation.py`)
+- structured JSON logging formatter/filter (`logging.py`)
+- in-memory Prometheus-text metrics registry (`metrics.py`)
+- exception reporting hook abstraction (`exceptions.py`)
+
+### Behavior
+
+- API propagates correlation id via `X-Correlation-ID` request/response header by default.
+- Request lifecycle logs include safe metadata only:
+  - `correlation_id`, `http_method`, `http_route`, `status_code`, `duration_ms`
+- Metrics endpoint is available at `GET /metrics` and intentionally excluded from OpenAPI v1 schema.
+
+### Observability environment variables
+
+- `DECIDER_OBSERVABILITY_LOG_LEVEL` (default: `INFO`)
+- `DECIDER_OBSERVABILITY_CORRELATION_HEADER` (default: `X-Correlation-ID`)
+- `DECIDER_OBSERVABILITY_ENABLE_REQUEST_LOGGING` (default: `true`)
+- `DECIDER_OBSERVABILITY_ENABLE_METRICS` (default: `true`)
+- `DECIDER_OBSERVABILITY_ENABLE_EXCEPTION_REPORTING` (default: `true`)
