@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, and T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events) + Angular 21 shell with backend-driven module visibility logic.
-  - Target product stack (planned next): PostgreSQL, MongoDB, Celery.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), and T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint) + Angular 21 shell with backend-driven module visibility logic.
+  - Target product stack (planned next): PostgreSQL, MongoDB, Celery broker/runtime deployment hardening.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -42,6 +42,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Export endpoint enforces `export:data` scope and records metadata-only audit events for success/forbidden attempts.
     - Entitlement updates return audit metadata payloads (`event_id`, actor/target, tenant, timestamp).
     - T8 adds tenant-scoped dossier/search-request domain models and SQLite repository implementations.
+    - T10 adds ingestion foundation modules:
+      - URL validation policy (`domain/url_policy.py`) with SSRF guardrails
+      - Source adapter protocol (`domain/source_adapter.py`)
+      - Retry/timeout HTTP client (`infrastructure/ingestion/http_client.py`)
+      - Task orchestration and queueing foundation (`infrastructure/ingestion/{celery_app,tasks,worker}.py`)
     - Initial SQL migration set for dossier core exists at `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`.
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
@@ -70,6 +75,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Tenant export API is scope-gated (`export:data`) and emits metadata-only audit events (no export payload data).
   - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
   - Core dossier storage operations are tenant-scoped at repository query boundaries (`tenant_id` included in keys/lookups).
+  - Ingestion remote-fetch foundation enforces SSRF-safe URL policy before outbound HTTP requests.
   - Frontend shell consumes backend entitlement shape for module visibility decisions.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
@@ -85,11 +91,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Dossier/object
   - Search request
   - Export action and audit record
+  - Ingestion job + source adapter
 - Main business rules:
   - Tenant isolation is mandatory.
   - Backend authorization is authoritative.
   - Admin entitlement mutations are auditable actions with metadata output.
   - Export actions (success and forbidden attempts) are auditable without payload leakage.
+  - Remote ingestion URLs must pass SSRF policy checks (scheme/host/IP safety).
   - Sensitive data handling must avoid PII leakage in logs/artifacts.
 - Invariants:
   - Any cross-tenant access is a security incident.
@@ -172,6 +180,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
   - Repository integration coverage includes tenant-scoped create/read behavior and migration up/down checks for dossier core storage.
+  - T10 ingestion unit coverage includes:
+    - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
+    - HTTP retry/timeout behavior (`services/api/tests/test_http_client_unit.py`)
+    - queue enqueue + eager processing and ingestion metadata flow (`services/api/tests/test_ingestion_pipeline_unit.py`)
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -212,6 +224,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Why risky: browser/session attack surface.
   - What to check: strict allow-lists and production-safe defaults.
   - Where in the code: future API middleware/config.
+- External remote fetch / SSRF:
+  - Why risky: potential access to internal network or cloud metadata endpoints.
+  - What to check: blocked localhost/private/link-local ranges, safe schemes only, DNS resolution checks.
+  - Where in the code: `services/api/src/decider_api/domain/url_policy.py`, `services/api/src/decider_api/infrastructure/ingestion/source_adapters.py`.
 - Payments/finance integrations:
   - Why risky: legal/financial impact.
   - What to check: explicit authorization, idempotency, audit trails.
@@ -362,7 +378,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - invariants / assumptions:
     - Enables `backend-present` verification profile.
   - dependencies:
-    - FastAPI runtime and pytest/httpx test stack.
+    - FastAPI runtime plus `celery` queue runtime and pytest/httpx test stack.
   - tests:
     - Consumed by `uv run --directory services/api pytest ...` commands.
 - `services/api/uv.lock` - Locked backend dependency graph for reproducible installs.
@@ -538,6 +554,16 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - none (in-memory state + standard library only).
   - tests:
     - Covered by `services/api/tests/test_exports_application_unit.py` and HTTP route tests.
+- `services/api/src/decider_api/application/ingestion.py` - Ingestion job payload builder and processing orchestrator.
+  - public surface / key exports:
+    - `IngestionJobRequest`, `build_ingestion_job_payload()`, `process_ingestion_job()`.
+  - invariants / assumptions:
+    - Required fields are non-empty and normalized.
+    - Processing returns metadata only (content length/type/status), not persisted payload data.
+  - dependencies:
+    - `decider_api.domain.source_adapter`, `decider_api.domain.url_policy`.
+  - tests:
+    - Covered by `services/api/tests/test_ingestion_pipeline_unit.py`.
 - `services/api/src/decider_api/domain/permissions.py` - Permission and module policy helpers.
   - public surface / key exports:
     - Supported module constants, module normalization, admin check, default module mapping, scope checks.
@@ -548,6 +574,74 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - none (pure policy functions).
   - tests:
     - Covered by `services/api/tests/test_permissions_unit.py`.
+- `services/api/src/decider_api/domain/url_policy.py` - SSRF-safe remote URL validation policy.
+  - public surface / key exports:
+    - `ValidatedRemoteUrl`, `validate_remote_url()`.
+  - invariants / assumptions:
+    - Only `http/https` schemes are allowed.
+    - Localhost, `.local`, private/non-global IP ranges, and credentialed URLs are blocked.
+  - dependencies:
+    - stdlib URL parsing and IP classification.
+  - tests:
+    - Covered by `services/api/tests/test_url_policy_unit.py`.
+- `services/api/src/decider_api/domain/source_adapter.py` - Source adapter protocol for ingestion.
+  - public surface / key exports:
+    - `SourceAdapter`, `SourceFetchResult`.
+  - invariants / assumptions:
+    - Adapters return normalized metadata (`status_code`, `content_type`, raw bytes body).
+  - dependencies:
+    - none (domain protocol/dataclass only).
+  - tests:
+    - Used by ingestion pipeline tests via fake adapter implementations.
+- `services/api/src/decider_api/infrastructure/ingestion/http_client.py` - Retry/timeout HTTP client for source adapters.
+  - public surface / key exports:
+    - `RetryPolicy`, `RetryingHttpClient`.
+  - invariants / assumptions:
+    - Retries transient transport failures and retryable status codes with exponential backoff.
+    - Raises immediately for non-retryable HTTP failures.
+  - dependencies:
+    - `httpx`.
+  - tests:
+    - Covered by `services/api/tests/test_http_client_unit.py`.
+- `services/api/src/decider_api/infrastructure/ingestion/source_adapters.py` - First HTTP-based source adapter implementation.
+  - public surface / key exports:
+    - `HttpSourceAdapter`.
+  - invariants / assumptions:
+    - Resolves host addresses and enforces URL safety policy before outbound fetch.
+  - dependencies:
+    - `socket`, `RetryingHttpClient`, `validate_remote_url`.
+  - tests:
+    - Covered indirectly via ingestion pipeline unit tests.
+- `services/api/src/decider_api/infrastructure/ingestion/celery_app.py` - Celery queue skeleton with eager local fallback.
+  - public surface / key exports:
+    - `IngestionTaskQueue`, `QueueEnqueueResult`, `create_celery_app()`, `register_task()`.
+  - invariants / assumptions:
+    - In eager mode, tasks execute synchronously for deterministic local development/tests.
+    - In non-eager mode, `.delay(...)` path is used and requires broker/backend runtime configuration.
+  - dependencies:
+    - `celery` runtime and `decider_api.settings`.
+  - tests:
+    - Covered by `services/api/tests/test_ingestion_pipeline_unit.py`.
+- `services/api/src/decider_api/infrastructure/ingestion/tasks.py` - Ingestion task queue wiring and runtime cache reset helpers.
+  - public surface / key exports:
+    - `enqueue_ingestion_job()`, `process_ingestion_job_task()`, `reset_ingestion_runtime_state()`.
+  - invariants / assumptions:
+    - Queue response includes task metadata and normalized job payload.
+  - dependencies:
+    - ingestion application/domain modules and ingestion infrastructure components.
+  - tests:
+    - Covered by `services/api/tests/test_ingestion_pipeline_unit.py`.
+- `services/api/src/decider_api/infrastructure/ingestion/worker.py` - Celery worker entrypoint for queued ingestion processing.
+  - public surface / key exports:
+    - `celery_app` module-level worker app for Celery CLI.
+    - `get_celery_worker_app()` lazy initialization helper.
+  - invariants / assumptions:
+    - Worker registers `decider_api.ingestion.process_job` task at startup.
+    - Fails fast if Celery runtime dependencies are unavailable.
+  - dependencies:
+    - `decider_api.infrastructure.ingestion.{celery_app,tasks}`, `decider_api.settings`.
+  - tests:
+    - Runtime contract is exercised via queue/unit tests and verify pipeline.
 - `services/api/tests/test_v1_application_unit.py` - Application-layer contract tests.
   - public surface / key exports:
     - Verifies auth context mapping and managed entitlement overrides.
@@ -586,6 +680,42 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.application.exports`.
   - tests:
     - Executed in backend local/ci verification flows.
+- `services/api/tests/test_url_policy_unit.py` - Unit tests for SSRF-safe URL validation rules.
+  - public surface / key exports:
+    - Verifies allowed schemes and blocked host/IP patterns.
+  - invariants / assumptions:
+    - Local/private ranges and credentialed URLs are always rejected.
+  - dependencies:
+    - `decider_api.domain.url_policy`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_http_client_unit.py` - Unit tests for retry/timeout HTTP client behavior.
+  - public surface / key exports:
+    - Verifies retry/backoff on transient failures and non-retry behavior on terminal HTTP errors.
+  - invariants / assumptions:
+    - Retry policy remains deterministic for mocked responses.
+  - dependencies:
+    - `httpx.MockTransport`, `decider_api.infrastructure.ingestion.http_client`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_ingestion_pipeline_unit.py` - Unit tests for ingestion payload building, queueing, and processing flow.
+  - public surface / key exports:
+    - Verifies queue eager processing behavior and injected queue enqueue path.
+  - invariants / assumptions:
+    - Processing returns metadata-only response with deterministic status fields.
+  - dependencies:
+    - `decider_api.application.ingestion`, `decider_api.infrastructure.ingestion.*`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_celery_worker_unit.py` - Unit tests for Celery app/worker wiring.
+  - public surface / key exports:
+    - Verifies Celery app config propagation and task registration in worker entrypoint.
+  - invariants / assumptions:
+    - Worker app exposes registered ingestion task name for queue consumption.
+  - dependencies:
+    - `decider_api.infrastructure.ingestion.{celery_app,worker,tasks}`.
+  - tests:
+    - Executed in backend local/ci verification flows.
 
 ## 10) Runbook (minimal)
 - How to run locally:
@@ -615,6 +745,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `DECIDER_KEYCLOAK_AUDIENCE`
     - `DECIDER_KEYCLOAK_JWKS_JSON`
     - optional `DECIDER_KEYCLOAK_TENANT_CLAIMS` (csv; defaults to `tenant_id,tenant,org_id`).
+  - Ingestion runtime tuning:
+    - `DECIDER_INGESTION_TASK_ALWAYS_EAGER` (default `true`)
+    - `DECIDER_INGESTION_TASK_BROKER_URL` (default `memory://`)
+    - `DECIDER_INGESTION_TASK_BACKEND_URL` (default `cache+memory://`)
+    - `DECIDER_INGESTION_HTTP_TIMEOUT_SECONDS` (default `5.0`)
+    - `DECIDER_INGESTION_HTTP_MAX_RETRIES` (default `2`)
+    - `DECIDER_INGESTION_HTTP_BACKOFF_SECONDS` (default `0.25`)
+  - Run Celery ingestion worker (non-eager path):
+    - `uv run --directory services/api celery -A decider_api.infrastructure.ingestion.worker:celery_app worker --loglevel=INFO`
 - Troubleshooting:
   - If verification fails due missing tools, install required toolchain for the active profile; do not add bypass scripts.
   - If filesystem MCP fails to initialize, verify `.codex/config.toml` and user `~/.codex/config.toml` use a valid local `node` command for `@modelcontextprotocol/server-filesystem` and a correct absolute allowed-directory path for this repo.
@@ -633,10 +772,14 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Validate T8 storage migration/tests:
     - `uv run --directory services/api pytest -q services/api/tests/test_migrations_integration.py`
     - `uv run --directory services/api pytest -q services/api/tests/test_dossier_repository_integration.py services/api/tests/test_search_request_repository_integration.py`
+  - Validate T10 ingestion modules/tests:
+    - `uv run --directory services/api pytest -q services/api/tests/test_url_policy_unit.py services/api/tests/test_http_client_unit.py services/api/tests/test_ingestion_pipeline_unit.py`
 
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-26 [T10-celery] Added Celery runtime dependency and worker entrypoint (`infrastructure/ingestion/worker.py`), plus non-eager queue-path test coverage and runbook updates.
+- 2026-02-26 [T10] Added ingestion foundation modules: SSRF-safe URL policy, source-adapter protocol, retry/timeout HTTP client, Celery/eager queue skeleton, ingestion task orchestration, and unit coverage for URL policy, HTTP retries, and enqueue/process flow.
 - 2026-02-26 [T9] Added `POST /api/v1/tenants/{tenant_id}/exports` with strict tenant + `export:data` scope gate, metadata-only export audit events for success/forbidden attempts, smoke coverage for positive/negative export flow, and synced OpenAPI v1 contract.
 - 2026-02-25 [T8] Added dossier core storage baseline: tenant-scoped domain models/repository abstractions for `dossiers` and `search_requests`, SQLite repository implementations, initial SQL migration set with rollback script, and integration tests for repository behavior + migration up/down validation.
 - 2026-02-25 [T7] Added server-side entitlement management APIs (`GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`), module-level access enforcement on tenant resources, audit metadata for entitlement mutations, and frontend module visibility alignment with backend `module_entitlements` response.

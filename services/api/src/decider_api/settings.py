@@ -9,6 +9,11 @@ def _parse_csv(value: str) -> tuple[str, ...]:
     return tuple(parsed)
 
 
+def _parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class AppSettings:
     app_name: str = "Decider API"
@@ -19,6 +24,12 @@ class AppSettings:
     keycloak_audience: str = ""
     keycloak_jwks_json: str = ""
     keycloak_tenant_claim_names: tuple[str, ...] = ("tenant_id", "tenant", "org_id")
+    ingestion_task_always_eager: bool = True
+    ingestion_task_broker_url: str = "memory://"
+    ingestion_task_backend_url: str = "cache+memory://"
+    ingestion_http_timeout_seconds: float = 5.0
+    ingestion_http_max_retries: int = 2
+    ingestion_http_backoff_seconds: float = 0.25
 
 
 @lru_cache(maxsize=1)
@@ -39,5 +50,25 @@ def get_settings() -> AppSettings:
                 "DECIDER_KEYCLOAK_TENANT_CLAIMS",
                 "tenant_id,tenant,org_id",
             )
+        ),
+        ingestion_task_always_eager=_parse_bool(
+            os.getenv("DECIDER_INGESTION_TASK_ALWAYS_EAGER", "true")
+        ),
+        ingestion_task_broker_url=os.getenv(
+            "DECIDER_INGESTION_TASK_BROKER_URL",
+            "memory://",
+        ),
+        ingestion_task_backend_url=os.getenv(
+            "DECIDER_INGESTION_TASK_BACKEND_URL",
+            "cache+memory://",
+        ),
+        ingestion_http_timeout_seconds=float(
+            os.getenv("DECIDER_INGESTION_HTTP_TIMEOUT_SECONDS", "5.0")
+        ),
+        ingestion_http_max_retries=int(
+            os.getenv("DECIDER_INGESTION_HTTP_MAX_RETRIES", "2")
+        ),
+        ingestion_http_backoff_seconds=float(
+            os.getenv("DECIDER_INGESTION_HTTP_BACKOFF_SECONDS", "0.25")
         ),
     )
