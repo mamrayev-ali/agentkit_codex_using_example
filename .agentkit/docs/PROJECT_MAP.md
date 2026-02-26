@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL).
   - Target product stack (planned next): PostgreSQL, MongoDB, Celery broker/runtime deployment hardening.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -61,6 +61,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - App shell navigation visibility is aligned with backend `module_entitlements` response shape.
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
+    - Playwright config and smoke e2e route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`.
+- `.github/workflows/` - CI gates and release-ready enforcement.
+  - Current tracked state:
+    - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, security scans, and final release gate job.
 - `docker-compose.dev.yml` - Local container-first development runner.
   - Current tracked state:
     - Provides `dev` service to run verification commands inside Docker.
@@ -158,7 +162,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Figma-backed tokens remain planned.
 - How UI is verified vs design:
   - Current T3 verification is lint + unit tests + production build.
-  - Playwright e2e coverage remains planned for later tickets.
+  - T12 adds Playwright smoke e2e route coverage for CI gate validation.
 
 ## 7) Testing & verification map
 ### Local DoD (must pass before asking to push)
@@ -178,6 +182,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - ci: `pnpm --dir frontend lint && pnpm --dir frontend test -- --run && pnpm --dir frontend build`
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
+- Additional CI gate commands:
+  - `make verify-api-e2e` runs backend HTTP e2e marker suite (`pytest -m e2e_api`).
+  - `make verify-ui-e2e` runs Playwright UI suite via pinned `@playwright/test@1.52.0` and supports `PLAYWRIGHT_SKIP_INSTALL=1` for CI flows that install browsers separately.
 - API e2e smoke definition:
   - In-process HTTP checks include:
     - `GET /health` legacy compatibility contract
@@ -215,8 +222,17 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Linux CI contract entrypoints:
   - `./.agentkit/scripts/verify.sh local`
   - `make verify-ci`
+- Required CI jobs for release gate:
+  - `verify-ci-contract`
+  - `api-e2e`
+  - `ui-e2e`
+  - `security-semgrep`
+  - `security-trivy-fs`
+  - `security-codeql`
+  - `release-gate`
 - Security scanning policy (high level):
   - Local rules require SAST/DAST/container scan coverage for CI in high-risk pathways.
+  - T12 baseline uses Semgrep + Trivy filesystem scan (SARIF upload) + CodeQL analysis.
 
 ## 8) High-risk areas
 - Auth/permissions/tenant isolation:
@@ -316,7 +332,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Called from `Makefile` verify targets.
 - `Makefile` - Verification contract target definitions.
   - public surface / key exports:
-    - `detect`, `verify-local`, `verify-smoke`, `verify-ci`.
+    - `detect`, `verify-local`, `verify-smoke`, `verify-ci`, `verify-api-e2e`, `verify-ui-e2e`.
   - invariants / assumptions:
     - Must run real checks (no placeholder behavior).
     - Must support profile matrix: scaffold-only / backend-present / frontend-present / backend+frontend.
@@ -355,6 +371,44 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Angular 21, TypeScript, Vitest, ESLint toolchain.
   - tests:
     - Consumed by `make verify-smoke`, `make verify-local`, and `make verify-ci` in frontend profile.
+- `frontend/playwright.config.ts` - Playwright runner config for CI UI e2e gate.
+  - public surface / key exports:
+    - Declares `e2e/` suite, Angular web server bootstrapping, chromium project, and CI-safe reporter settings.
+  - invariants / assumptions:
+    - UI e2e base URL remains `http://127.0.0.1:4200`.
+    - Uses `pnpm start` to boot Angular app before tests.
+  - dependencies:
+    - `@playwright/test@1.52.0` runtime via pinned `pnpm dlx`.
+  - tests:
+    - Executed via `make verify-ui-e2e`.
+- `frontend/e2e/shell-routes.spec.ts` - UI e2e smoke suite for shell route contract.
+  - public surface / key exports:
+    - Verifies dashboard boot route, shell navigation to dossiers, and unknown-route not-found behavior.
+  - invariants / assumptions:
+    - Route labels remain stable (`Dashboard`, `Dossiers`, `Not Found`).
+  - dependencies:
+    - `frontend/playwright.config.ts`.
+  - tests:
+    - Executed via `make verify-ui-e2e` and CI `ui-e2e` job.
+- `.github/workflows/verify-ci-release-gate.yml` - CI pipeline for T12 release gate.
+  - public surface / key exports:
+    - Jobs: `verify-ci-contract`, `api-e2e`, `ui-e2e`, `security-semgrep`, `security-trivy-fs`, `security-codeql`, `release-gate`.
+  - invariants / assumptions:
+    - High-risk tickets require green `release-gate` before closure.
+    - Security scan outputs are uploaded as SARIF/artifacts for auditability.
+  - dependencies:
+    - GitHub Actions runners + configured permissions for security-events upload.
+  - tests:
+    - Triggered on `push`, `pull_request`, and manual dispatch.
+- `.agentkit/docs/RELEASE_READY_CHECKLIST.md` - Production-branch release checklist and DoD gate definition.
+  - public surface / key exports:
+    - Mandatory CI jobs, evidence capture policy, and branch-protection required checks.
+  - invariants / assumptions:
+    - Ticket closure for high-risk scope is blocked until all release-gate jobs are green.
+  - dependencies:
+    - `.github/workflows/verify-ci-release-gate.yml`.
+  - tests:
+    - Verified by PR review and CI status checks.
 - `frontend/angular.json` - Angular workspace/build/test configuration.
   - public surface / key exports:
     - Build/serve/test targets and production file replacement for environments.
@@ -822,6 +876,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Frontend shell:
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
+  - CI-oriented gates:
+    - `make verify-api-e2e`
+    - `make verify-ui-e2e PLAYWRIGHT_SKIP_INSTALL=1`
+    - `pnpm --dir frontend dlx @playwright/test@1.52.0 install --with-deps chromium`
 - Required env vars:
   - Public health endpoint works without auth env vars.
   - Authenticated endpoints require Keycloak validation config in real runtime:
@@ -872,6 +930,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-26 [T12] Hardened CI release gate: added GitHub Actions workflow with required jobs (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL scans, final `release-gate`), added Makefile gate targets (`verify-api-e2e`, `verify-ui-e2e`), introduced Playwright route smoke suite/config, and documented production release checklist in `.agentkit/docs/RELEASE_READY_CHECKLIST.md`.
 - 2026-02-26 [T11] Added observability guardrails: structured request lifecycle logging with correlation-id propagation, `/metrics` endpoint (excluded from OpenAPI schema), exception reporting hook abstraction, observability settings, and dedicated HTTP/unit test coverage.
 - 2026-02-26 [T10-celery] Added Celery runtime dependency and worker entrypoint (`infrastructure/ingestion/worker.py`), plus non-eager queue-path test coverage and runbook updates.
 - 2026-02-26 [T10] Added ingestion foundation modules: SSRF-safe URL policy, source-adapter protocol, retry/timeout HTTP client, Celery/eager queue skeleton, ingestion task orchestration, and unit coverage for URL policy, HTTP retries, and enqueue/process flow.

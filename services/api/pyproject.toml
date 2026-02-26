@@ -17,4 +17,5 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
   "smoke: quick API contract smoke checks",
+  "e2e_api: API end-to-end HTTP flow checks for CI gate",
 ]
