@@ -7,6 +7,7 @@ from decider_api.application.entitlements import (
 )
 from decider_api.domain.permissions import (
     default_modules_for_claims,
+    has_scope,
     is_admin_actor,
     normalize_modules,
 )
@@ -56,3 +57,8 @@ def test_resolve_modules_for_subject_prefers_managed_state() -> None:
     )
 
     assert modules == ["dashboard", "watchlist"]
+
+
+def test_has_scope_is_case_insensitive_and_trim_aware() -> None:
+    assert has_scope(required_scope="export:data", scopes=["read:data", " Export:Data "])
+    assert not has_scope(required_scope="export:data", scopes=["read:data"])

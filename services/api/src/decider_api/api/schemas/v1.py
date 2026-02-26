@@ -44,3 +44,20 @@ class EntitlementsResponse(BaseModel):
     subject: str
     enabled_modules: list[str] = Field(default_factory=list)
     audit_metadata: EntitlementAuditMetadata | None = None
+
+
+class ExportAuditMetadata(BaseModel):
+    event_id: str
+    action: Literal["export.requested"]
+    actor_subject: str
+    tenant_id: str
+    outcome: Literal["success", "forbidden"]
+    occurred_at: str
+    reason: str | None = None
+
+
+class ExportResponse(BaseModel):
+    tenant_id: str
+    export_id: str
+    status: Literal["accepted"]
+    audit_metadata: ExportAuditMetadata

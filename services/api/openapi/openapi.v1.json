@@ -139,6 +139,88 @@
         "title": "EntitlementsUpdateRequest",
         "type": "object"
       },
+      "ExportAuditMetadata": {
+        "properties": {
+          "action": {
+            "const": "export.requested",
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_subject": {
+            "title": "Actor Subject",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "forbidden"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "action",
+          "actor_subject",
+          "tenant_id",
+          "outcome",
+          "occurred_at"
+        ],
+        "title": "ExportAuditMetadata",
+        "type": "object"
+      },
+      "ExportResponse": {
+        "properties": {
+          "audit_metadata": {
+            "$ref": "#/components/schemas/ExportAuditMetadata"
+          },
+          "export_id": {
+            "title": "Export Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "accepted",
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "export_id",
+          "status",
+          "audit_metadata"
+        ],
+        "title": "ExportResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -467,6 +549,70 @@
           }
         },
         "summary": "Put Tenant Entitlements V1",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/exports": {
+      "post": {
+        "operationId": "post_tenant_export_v1_api_v1_tenants__tenant_id__exports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Tenant Export V1",
         "tags": [
           "v1"
         ]

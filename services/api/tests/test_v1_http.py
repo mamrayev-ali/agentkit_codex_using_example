@@ -7,14 +7,20 @@ from decider_api.api.dependencies.auth import (
 )
 from decider_api.app import app
 from decider_api.application.entitlements import reset_entitlements_state
+from decider_api.application.exports import (
+    list_export_audit_events,
+    reset_export_state,
+)
 from test_auth_context_authn import _VALID_TOKEN, _build_validator
 
 
 @pytest.fixture(autouse=True)
-def _reset_entitlements() -> None:
+def _reset_state() -> None:
     reset_entitlements_state()
+    reset_export_state()
     yield
     reset_entitlements_state()
+    reset_export_state()
 
 
 def _admin_auth_context() -> dict[str, object]:
@@ -33,6 +39,16 @@ def _user_auth_context() -> dict[str, object]:
         "subject": "user-123",
         "tenant_id": "acme",
         "scopes": ["read:data", "watchlist:view"],
+        "roles": ["user"],
+    }
+
+
+def _export_user_auth_context() -> dict[str, object]:
+    return {
+        "authenticated": True,
+        "subject": "export-user-1",
+        "tenant_id": "acme",
+        "scopes": ["read:data", "watchlist:view", "export:data"],
         "roles": ["user"],
     }
 
@@ -79,6 +95,68 @@ def test_v1_tenant_resources_endpoint_blocks_cross_tenant_access() -> None:
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Forbidden"}
+
+
+@pytest.mark.smoke
+def test_export_endpoint_rejects_missing_scope_and_audits_attempt() -> None:
+    app.dependency_overrides[get_authenticated_auth_context] = _user_auth_context
+    try:
+        client = TestClient(app)
+        response = client.post("/api/v1/tenants/acme/exports")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Forbidden"}
+
+    audit_events = list_export_audit_events()
+    assert len(audit_events) == 1
+    assert audit_events[0]["tenant_id"] == "acme"
+    assert audit_events[0]["actor_subject"] == "user-123"
+    assert audit_events[0]["outcome"] == "forbidden"
+    assert audit_events[0]["reason"] == "missing_scope"
+
+
+def test_export_endpoint_rejects_cross_tenant_and_audits_attempt() -> None:
+    app.dependency_overrides[get_authenticated_auth_context] = _export_user_auth_context
+    try:
+        client = TestClient(app)
+        response = client.post("/api/v1/tenants/other-tenant/exports")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Forbidden"}
+
+    audit_events = list_export_audit_events()
+    assert len(audit_events) == 1
+    assert audit_events[0]["tenant_id"] == "other-tenant"
+    assert audit_events[0]["actor_subject"] == "export-user-1"
+    assert audit_events[0]["outcome"] == "forbidden"
+    assert audit_events[0]["reason"] == "tenant_mismatch"
+
+
+@pytest.mark.smoke
+def test_export_endpoint_accepts_scope_and_tenant_and_audits_success() -> None:
+    app.dependency_overrides[get_authenticated_auth_context] = _export_user_auth_context
+    try:
+        client = TestClient(app)
+        response = client.post("/api/v1/tenants/acme/exports")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tenant_id"] == "acme"
+    assert body["export_id"].startswith("export-")
+    assert body["status"] == "accepted"
+    assert body["audit_metadata"]["action"] == "export.requested"
+    assert body["audit_metadata"]["actor_subject"] == "export-user-1"
+    assert body["audit_metadata"]["outcome"] == "success"
+
+    audit_events = list_export_audit_events()
+    assert len(audit_events) == 1
+    assert audit_events[0]["outcome"] == "success"
 
 
 def test_admin_can_update_entitlements_and_change_access() -> None:
