@@ -12,12 +12,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
   - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL).
-  - Target product stack (planned next): PostgreSQL, MongoDB, Celery broker/runtime deployment hardening.
+  - Target product stack (planned next): local end-to-end runtime stack (Keycloak + Postgres + Redis + API + frontend), persistent entitlement/audit storage, and full user/admin walkthrough automation (ROADMAP T13-T20).
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
   - `.agentkit/scripts/verify.sh`
   - `.agentkit/rules/local/project-context.md`
+  - `.agentkit/rules/local/frontend-uikit.md`
 
 ## 1) Repo structure (high level)
 - `.agentkit/` - Process framework: docs, rules, templates, and verification scripts.
@@ -159,7 +160,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Environment metadata remains read-only from `src/environments/*`.
 - Where styles/tokens live:
   - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
+  - Shared UI kit stylesheet is tracked at `frontend/src/styles/ui-kit.css` and imported by `frontend/src/styles.css`.
   - Figma-backed tokens remain planned.
+  - Mandatory UI composition/layout constraints for upcoming implementation are defined in `.agentkit/rules/local/frontend-uikit.md`.
 - How UI is verified vs design:
   - Current T3 verification is lint + unit tests + production build.
   - T12 adds Playwright smoke e2e route coverage for CI gate validation.
@@ -930,6 +933,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-26 [ui-kit-file-import] Moved user-provided UI kit stylesheet into frontend source tree as `frontend/src/styles/ui-kit.css` and wired global import in `frontend/src/styles.css` for upcoming UI implementation tickets.
+- 2026-02-26 [ui-uikit-rules] Added project-local frontend UI kit governance rules (`.agentkit/rules/local/frontend-uikit.md`) covering token-only colors, required desktop/mobile layout behavior, registry view modes, tool card/details composition, dashboard blocks, form conventions, and table behavior.
+- 2026-02-26 [roadmap-post-t12] Extended roadmap beyond T12 with T13-T20 to reach local end-to-end user/admin walkthrough readiness (runtime stack, OIDC UI auth, persistent entitlements/audit, full workflow UI/API coverage, deterministic demo seed, and journey-level e2e gates).
 - 2026-02-26 [T12] Hardened CI release gate: added GitHub Actions workflow with required jobs (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL scans, final `release-gate`), added Makefile gate targets (`verify-api-e2e`, `verify-ui-e2e`), introduced Playwright route smoke suite/config, and documented production release checklist in `.agentkit/docs/RELEASE_READY_CHECKLIST.md`.
 - 2026-02-26 [T11] Added observability guardrails: structured request lifecycle logging with correlation-id propagation, `/metrics` endpoint (excluded from OpenAPI schema), exception reporting hook abstraction, observability settings, and dedicated HTTP/unit test coverage.
 - 2026-02-26 [T10-celery] Added Celery runtime dependency and worker entrypoint (`infrastructure/ingestion/worker.py`), plus non-eager queue-path test coverage and runbook updates.

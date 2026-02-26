@@ -9,6 +9,7 @@ Files:
 - `security.md` — Keycloak/OIDC, scopes, tenant isolation, headers/CORS, injection/SSRF, secrets, audit logging
 - `testing.md` — strict e2e policy: local smoke + CI full UI+API, coverage rules
 - `workflow.md` — trunk-based workflow, “no approval → no change” rules, audit logging, DOC-gates
+- `frontend-uikit.md` — mandatory UI-kit layout/composition rules for frontend implementation tickets
 
 Non-negotiable:
 - `.agentkit/docs/PROJECT_MAP.md` must be updated on every ticket (strict).

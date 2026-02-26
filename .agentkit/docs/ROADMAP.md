@@ -43,6 +43,7 @@ Success means: tenant-safe access control is enforced server-side, high-risk act
 - M2: Secure multi-tenant core flows
 - M3: Dossier and export workflows
 - M4: Reliability, CI hardening, and release readiness
+- M5: Local end-to-end product walkthrough readiness (user/admin)
 
 ## 4) Ticket plan (ordered)
 Each ticket is intended to be done in one agent chat (plan -> implement -> verify -> done).
@@ -238,6 +239,142 @@ Each ticket is intended to be done in one agent chat (plan -> implement -> verif
 
 **Notes**
 - PR required if CI/CD configuration is changed.
+
+### T13 - Stand up local runtime stack for walkthrough
+**Scope**
+- Add a local compose profile for API + frontend + Postgres + Redis + Keycloak.
+- Add bootstrap configuration for local realm, clients, and demo tenants.
+- Provide one-command startup/shutdown runbook entries.
+
+**Acceptance criteria**
+- `docker compose ... up` brings all required services to healthy state.
+- API can validate real Keycloak-issued tokens in local stack.
+- Startup prerequisites and troubleshooting are documented.
+
+**Risk**
+- high
+
+**Notes**
+- PR required (Docker/runtime infrastructure area).
+
+### T14 - Integrate frontend OIDC login/logout with role-aware guards
+**Scope**
+- Implement OIDC Authorization Code + PKCE in frontend.
+- Add login/logout/session handling and route guarding by auth state.
+- Fetch backend auth-context and drive module visibility from real claims.
+
+**Acceptance criteria**
+- User and admin can log in locally via Keycloak and reach authorized routes.
+- Unauthenticated access is redirected to login.
+- Session expiration and re-login behavior are covered in tests.
+
+**Risk**
+- high
+
+**Notes**
+- PR + threat model required (auth area).
+
+### T15 - Persist entitlements and audit trail in database
+**Scope**
+- Replace in-memory entitlement/audit state with persistent storage.
+- Add migration set and rollback for entitlement and audit tables.
+- Keep response contract compatible with existing API shape.
+
+**Acceptance criteria**
+- Entitlement updates survive API restarts.
+- Audit records are queryable for admin review.
+- Migration up/down paths are tested and documented.
+
+**Risk**
+- high
+
+**Notes**
+- PR + migration plan + threat model required (migrations + permissions area).
+
+### T16 - Implement user dossier/search workflows in public API
+**Scope**
+- Add tenant-scoped endpoints for dossier list/create/detail.
+- Add tenant-scoped endpoints for search-request create/list/detail/status.
+- Wire ingestion trigger path into user search workflow.
+
+**Acceptance criteria**
+- Authenticated tenant user can complete dossier and search lifecycle via API.
+- Cross-tenant and missing-entitlement requests are blocked with 403.
+- OpenAPI v1 and API e2e coverage are updated.
+
+**Risk**
+- high
+
+**Notes**
+- PR required (public API contract area).
+
+### T17 - Build frontend user flows for dossier/search/export
+**Scope**
+- Replace shell pages with working views: dashboard, dossiers, search, export.
+- Add data fetching, loading/error states, and empty-state UX.
+- Keep frontend module visibility aligned with backend entitlements.
+
+**Acceptance criteria**
+- User can execute happy-path flows from UI without manual API calls.
+- Forbidden operations are shown with explicit UX feedback.
+- UI unit/integration tests cover critical user paths.
+
+**Risk**
+- medium
+
+**Notes**
+- Keep UI surface scoped to MVP workflows.
+
+### T18 - Build frontend admin flows for entitlement management
+**Scope**
+- Add admin UI to view/update subject entitlements within tenant.
+- Add admin UI to inspect export/permission audit events.
+- Reflect permission changes in UI state on next auth-context refresh.
+
+**Acceptance criteria**
+- Admin can grant/revoke modules for a target subject.
+- Updated rights are enforced server-side and reflected in user UX.
+- Admin operations create auditable records visible in UI/API.
+
+**Risk**
+- high
+
+**Notes**
+- PR + threat model required (permissions/auth area).
+
+### T19 - Add deterministic demo seed and scenario harness
+**Scope**
+- Provide deterministic seed data for tenants, users, dossiers, and requests.
+- Add scripts/runbook to reset environment and reseed scenarios.
+- Define canonical walkthrough scenarios for user and admin roles.
+
+**Acceptance criteria**
+- Fresh local setup can be prepared for demo/testing in <= 20 minutes.
+- Seed/reset process is repeatable and documented.
+- Scenario checklist maps each walkthrough step to expected system behavior.
+
+**Risk**
+- medium
+
+**Notes**
+- Seed data must be synthetic and policy-safe (no real PII/secrets).
+
+### T20 - Enforce end-to-end acceptance gate for user/admin walkthrough
+**Scope**
+- Add Playwright e2e suites for full user and admin journeys.
+- Add API e2e scenarios aligned with UI paths and role transitions.
+- Gate release readiness on walkthrough suite pass.
+
+**Acceptance criteria**
+- CI runs and passes user/admin journey suites as required checks.
+- Manual runbook steps match automated assertions.
+- Release checklist references walkthrough evidence artifacts.
+
+**Risk**
+- high
+
+**Notes**
+- PR required if CI gate configuration changes.
 
 ## 5) Backlog / parking lot
 - Data retention and archival strategy for sensitive source material.
