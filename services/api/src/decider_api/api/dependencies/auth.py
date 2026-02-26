@@ -13,6 +13,14 @@ from decider_api.settings import get_settings
 @lru_cache(maxsize=1)
 def get_token_validator() -> KeycloakTokenValidator:
     settings = get_settings()
+    if settings.keycloak_jwks_url:
+        return KeycloakTokenValidator.from_jwks_url(
+            issuer=settings.keycloak_issuer,
+            audience=settings.keycloak_audience,
+            tenant_claim_names=settings.keycloak_tenant_claim_names,
+            jwks_url=settings.keycloak_jwks_url,
+            timeout_seconds=settings.keycloak_jwks_timeout_seconds,
+        )
     return KeycloakTokenValidator.from_jwks_json(
         issuer=settings.keycloak_issuer,
         audience=settings.keycloak_audience,

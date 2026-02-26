@@ -11,11 +11,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL).
-  - Target product stack (planned next): local end-to-end runtime stack (Keycloak + Postgres + Redis + API + frontend), persistent entitlement/audit storage, and full user/admin walkthrough automation (ROADMAP T13-T20).
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`).
+  - Target product stack (planned next): frontend OIDC flow integration, persistent entitlement/audit storage, and full user/admin walkthrough automation (ROADMAP T14-T20).
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
+  - `.agentkit/docs/LOCAL_RUNTIME_STACK.md`
   - `.agentkit/scripts/verify.sh`
   - `.agentkit/rules/local/project-context.md`
   - `.agentkit/rules/local/frontend-uikit.md`
@@ -71,6 +72,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Provides `dev` service to run verification commands inside Docker.
     - Builds `dev` image from `docker/dev.Dockerfile` with `uv` preinstalled for backend verify commands.
     - Mounts repository and caches, including dedicated pnpm store volume.
+    - T13 adds `runtime` profile services for walkthrough stack:
+      - `postgres`, `redis`, `keycloak`, `keycloak-bootstrap`, `api`, `frontend`.
+    - Keycloak realm bootstrap config is imported from `docker/keycloak/realm-decider-local.json`.
 - `logs/agent/` - Local human-readable ticket logs (gitignored).
 
 ## 2) Key contracts & boundaries
@@ -82,6 +86,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - OpenAPI v1 contract is checked into repo and synced with runtime app schema.
   - `GET /health` remains as legacy compatibility endpoint outside the public OpenAPI surface.
   - Auth context response includes roles/scopes/module entitlements.
+  - Auth token validation supports both static JWKS JSON and live JWKS URL retrieval modes.
   - Tenant export API is scope-gated (`export:data`) and emits metadata-only audit events (no export payload data).
   - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
   - Core dossier storage operations are tenant-scoped at repository query boundaries (`tenant_id` included in keys/lookups).
@@ -347,15 +352,85 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `docker-compose.dev.yml` - Container-first local development runner.
   - public surface / key exports:
     - `dev` service used by runbook commands for verify/test/lint/build.
+    - `runtime` profile services for local walkthrough (`frontend`, `api`, `postgres`, `redis`, `keycloak`).
   - invariants / assumptions:
     - Must build from `docker/dev.Dockerfile` so `uv` is available in one-off verify runs.
     - Must keep repository bind-mounted at `/workspace`.
     - Must keep pnpm store outside repo tree to avoid DOC-gate noise.
     - Must export `IN_DEV_CONTAINER=1` for verify wrapper loop-guard.
+    - Runtime profile requires `.env.runtime` for local-only Keycloak credentials (never committed).
+    - Runtime API host binding can be overridden with `DECIDER_LOCAL_API_PORT` (default `8000`).
   - dependencies:
     - Local Docker Desktop / Docker Engine.
   - tests:
     - Validated via `docker compose -f docker-compose.dev.yml config`.
+- `docker/api.Dockerfile` - Runtime API container image for local walkthrough profile.
+  - public surface / key exports:
+    - Builds API runtime from `services/api` and runs `uvicorn decider_api.app:app`.
+  - invariants / assumptions:
+    - Uses `uv.lock` with `uv sync --frozen --no-dev`.
+    - Exposes API on container port `8000`.
+  - dependencies:
+    - Python 3.13 base image + `uv`.
+  - tests:
+    - Validated through runtime profile startup and API health checks.
+- `docker/frontend.Dockerfile` - Runtime frontend container image for local walkthrough profile.
+  - public surface / key exports:
+    - Installs frontend dependencies with pinned `pnpm-lock.yaml` and runs `pnpm start`.
+  - invariants / assumptions:
+    - Exposes frontend dev server on container port `4200`.
+  - dependencies:
+    - Node 22 base image + corepack/pnpm.
+  - tests:
+    - Validated through runtime profile startup and frontend health checks.
+- `.dockerignore` - Docker build context guardrails for local runtime images.
+  - public surface / key exports:
+    - Excludes heavy local artifacts (`frontend/node_modules`, `.venv`, caches) from Docker contexts.
+  - invariants / assumptions:
+    - Must keep runtime image builds deterministic and avoid host-specific lockfile/path access errors.
+  - dependencies:
+    - Applied automatically by Docker build engine.
+  - tests:
+    - Validated by successful `docker compose ... --profile runtime up -d --build` after initial context failure fix.
+- `docker/keycloak/realm-decider-local.json` - Local Keycloak bootstrap realm definition for T13.
+  - public surface / key exports:
+    - Defines realm `decider-local`, demo tenants/groups, demo users, and OIDC clients (`decider-api`, `decider-frontend`, `decider-cli`).
+  - invariants / assumptions:
+    - Contains no embedded secrets.
+    - Includes tenant claim mappers and audience mapper for `decider-api`.
+  - dependencies:
+    - Imported by Keycloak container with `--import-realm`.
+  - tests:
+    - Validated by successful `keycloak-bootstrap` completion and token issuance smoke checks.
+- `docker/keycloak/bootstrap.sh` - Runtime bootstrap script for demo user credentials.
+  - public surface / key exports:
+    - Authenticates with Keycloak admin API and sets runtime passwords for demo users.
+  - invariants / assumptions:
+    - Password values come from environment variables only.
+    - Script must not print secrets/tokens.
+  - dependencies:
+    - Keycloak `kcadm.sh` in container image.
+  - tests:
+    - Validated by `keycloak-bootstrap` service completion in runtime profile.
+- `.env.runtime.example` - Template for local runtime-only Keycloak credentials.
+  - public surface / key exports:
+    - Documents required runtime variables for compose `runtime` profile.
+  - invariants / assumptions:
+    - Contains placeholders only; no real secrets.
+    - Real `.env.runtime` is gitignored.
+  - dependencies:
+    - Used with `docker compose --env-file .env.runtime`.
+  - tests:
+    - Validated when runtime profile starts successfully.
+- `.agentkit/docs/LOCAL_RUNTIME_STACK.md` - T13 runtime walkthrough runbook.
+  - public surface / key exports:
+    - One-command startup/shutdown instructions and token smoke checks.
+  - invariants / assumptions:
+    - Requires `.env.runtime` with local-only credentials.
+  - dependencies:
+    - `docker-compose.dev.yml` runtime profile services.
+  - tests:
+    - Manual runbook verification in local environment.
 - `docker/dev.Dockerfile` - Dev image definition used by `docker-compose.dev.yml`.
   - public surface / key exports:
     - Extends `mcr.microsoft.com/devcontainers/universal:2` and installs `uv`.
@@ -876,6 +951,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
     - `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
     - `docker compose -f docker-compose.dev.yml down -v`
+  - T13 local runtime walkthrough profile:
+    - `cp .env.runtime.example .env.runtime`
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime up -d --build`
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime ps`
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime down -v`
+    - full runbook: `.agentkit/docs/LOCAL_RUNTIME_STACK.md`
   - Frontend shell:
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
@@ -889,7 +970,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `DECIDER_KEYCLOAK_ISSUER`
     - `DECIDER_KEYCLOAK_AUDIENCE`
     - `DECIDER_KEYCLOAK_JWKS_JSON`
+    - optional `DECIDER_KEYCLOAK_JWKS_URL` (recommended for local runtime stack)
+    - optional `DECIDER_KEYCLOAK_JWKS_TIMEOUT_SECONDS` (default `5.0`)
     - optional `DECIDER_KEYCLOAK_TENANT_CLAIMS` (csv; defaults to `tenant_id,tenant,org_id`).
+  - Local runtime bootstrap credentials (`.env.runtime`, gitignored):
+    - `DECIDER_KEYCLOAK_ADMIN_USER`
+    - `DECIDER_KEYCLOAK_ADMIN_PASSWORD`
+    - `DECIDER_KEYCLOAK_DEMO_USER_PASSWORD`
+    - `DECIDER_KEYCLOAK_DEMO_ADMIN_PASSWORD`
+    - optional `DECIDER_LOCAL_API_PORT` (defaults to `8000`, use override when host port is occupied)
   - Ingestion runtime tuning:
     - `DECIDER_INGESTION_TASK_ALWAYS_EAGER` (default `true`)
     - `DECIDER_INGESTION_TASK_BROKER_URL` (default `memory://`)
@@ -913,6 +1002,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - If `verify.ps1` fails in wrapper mode, verify Docker Desktop is running and `docker compose -f docker-compose.dev.yml run --rm dev make detect` works manually.
   - If backend checks fail with `uv: command not found` in wrapper mode, rebuild dev image:
     - `docker compose -f docker-compose.dev.yml build --no-cache dev`
+  - If runtime profile services fail to become healthy, inspect compose service logs:
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime logs --tail 200`
+  - If `keycloak-bootstrap` fails, verify `.env.runtime` values and realm import file:
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime logs keycloak keycloak-bootstrap --tail 200`
+  - If API rejects local Keycloak tokens (`401`), verify issuer/audience/JWKS settings inside `api` service environment.
   - For host-only fallback mode (no compose file / inside container):
     - ensure `uv` is installed and available on PATH
     - run `uv run --directory services/api pytest -q`
@@ -933,6 +1027,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-26 [T13] Added local runtime walkthrough profile in `docker-compose.dev.yml` (`frontend`, `api`, `postgres`, `redis`, `keycloak`, `keycloak-bootstrap`), introduced runtime Dockerfiles/bootstrap artifacts (`docker/api.Dockerfile`, `docker/frontend.Dockerfile`, `docker/keycloak/*`), added Keycloak JWKS URL auth mode in API settings/dependencies, added configurable API host-port binding (`DECIDER_LOCAL_API_PORT`), and documented one-command runtime runbook in `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
 - 2026-02-26 [ui-kit-file-import] Moved user-provided UI kit stylesheet into frontend source tree as `frontend/src/styles/ui-kit.css` and wired global import in `frontend/src/styles.css` for upcoming UI implementation tickets.
 - 2026-02-26 [ui-uikit-rules] Added project-local frontend UI kit governance rules (`.agentkit/rules/local/frontend-uikit.md`) covering token-only colors, required desktop/mobile layout behavior, registry view modes, tool card/details composition, dashboard blocks, form conventions, and table behavior.
 - 2026-02-26 [roadmap-post-t12] Extended roadmap beyond T12 with T13-T20 to reach local end-to-end user/admin walkthrough readiness (runtime stack, OIDC UI auth, persistent entitlements/audit, full workflow UI/API coverage, deterministic demo seed, and journey-level e2e gates).
