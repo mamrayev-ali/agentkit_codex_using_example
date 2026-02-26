@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, and T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events) + Angular 21 shell with backend-driven module visibility logic.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation, tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, and T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events) + Angular 21 shell with backend-driven module visibility logic.
   - Target product stack (planned next): PostgreSQL, MongoDB, Celery.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -41,6 +41,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Token validation (`RS256` + `iss/aud/exp`) and tenant guard checks are enforced server-side.
     - Export endpoint enforces `export:data` scope and records metadata-only audit events for success/forbidden attempts.
     - Entitlement updates return audit metadata payloads (`event_id`, actor/target, tenant, timestamp).
+    - T8 adds tenant-scoped dossier/search-request domain models and SQLite repository implementations.
+    - Initial SQL migration set for dossier core exists at `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`.
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
@@ -67,6 +69,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Auth context response includes roles/scopes/module entitlements.
   - Tenant export API is scope-gated (`export:data`) and emits metadata-only audit events (no export payload data).
   - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
+  - Core dossier storage operations are tenant-scoped at repository query boundaries (`tenant_id` included in keys/lookups).
   - Frontend shell consumes backend entitlement shape for module visibility decisions.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
@@ -117,13 +120,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Database(s):
   - Planned: PostgreSQL primary, MongoDB secondary.
 - Migration approach:
-  - Planned Alembic linear migration history.
+  - Initial SQL migration set is tracked in `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`.
+  - Alembic-based linear migration history remains a planned follow-up.
 - Rollback approach:
   - Mandatory migration plan + rollback for any schema change.
-- Critical tables/collections (planned high level):
-  - tenants/users/permissions
-  - dossier/search requests
-  - export audit metadata
+  - T8 rollback path is implemented via `0001_initial_dossier_core.down.sql`.
+- Critical tables/collections:
+  - `dossiers` (tenant-scoped dossier registry)
+  - `search_requests` (tenant-scoped search history linked to dossiers)
+  - planned next: tenants/users/permissions and export audit metadata persistence
 
 ## 6) Frontend / UI surface (if applicable)
 - Routing approach:
@@ -166,6 +171,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - export negative (`403` missing scope) and export positive (`200` with scope + tenant) paths
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
+  - Repository integration coverage includes tenant-scoped create/read behavior and migration up/down checks for dossier core storage.
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -442,6 +448,72 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `services/api/openapi/openapi.v1.json`.
   - tests:
     - Executed in smoke/local/ci backend verification flows.
+- `services/api/src/decider_api/application/dossiers.py` - Application service helpers for dossier create/read use-cases.
+  - public surface / key exports:
+    - `create_dossier()`, `get_dossier()`.
+  - invariants / assumptions:
+    - Always delegates persistence through `DossierRepository` abstraction.
+  - dependencies:
+    - `decider_api.domain.dossiers`.
+  - tests:
+    - Covered by `services/api/tests/test_dossier_repository_integration.py`.
+- `services/api/src/decider_api/application/search_requests.py` - Application service helpers for search request create/read use-cases.
+  - public surface / key exports:
+    - `create_search_request()`, `get_search_request()`.
+  - invariants / assumptions:
+    - Search request write path remains tenant-scoped and dossier-linked.
+  - dependencies:
+    - `decider_api.domain.search_requests`.
+  - tests:
+    - Covered by `services/api/tests/test_search_request_repository_integration.py`.
+- `services/api/src/decider_api/domain/dossiers.py` - Core dossier entities, validation, and repository protocol.
+  - public surface / key exports:
+    - `Dossier`, `DossierDraft`, `DossierRepository`, `validate_dossier_draft()`.
+  - invariants / assumptions:
+    - `subject_type` is allow-listed (`organization`, `person`).
+    - Primary business identity is (`tenant_id`, `dossier_id`).
+  - dependencies:
+    - none (domain-only module).
+  - tests:
+    - Validated through storage integration tests.
+- `services/api/src/decider_api/domain/search_requests.py` - Search request entities, validation, and repository protocol.
+  - public surface / key exports:
+    - `SearchRequest`, `SearchRequestDraft`, `SearchRequestRepository`, `validate_search_request_draft()`.
+  - invariants / assumptions:
+    - Status is allow-listed (`queued`, `running`, `completed`, `failed`).
+    - Every search request must be linked to a tenant-scoped dossier.
+  - dependencies:
+    - none (domain-only module).
+  - tests:
+    - Validated through storage integration tests.
+- `services/api/src/decider_api/infrastructure/storage/` - SQLite-backed repository implementations + migration helpers for dossier core.
+  - public surface / key exports:
+    - `create_sqlite_connection()`, `SqliteDossierRepository`, `SqliteSearchRequestRepository`, `apply_initial_schema()`, `rollback_initial_schema()`.
+  - invariants / assumptions:
+    - Foreign keys are enabled (`PRAGMA foreign_keys = ON`).
+    - Tenant scoping is enforced in query predicates.
+  - dependencies:
+    - stdlib `sqlite3` and SQL migration scripts under `services/api/migrations/versions/`.
+  - tests:
+    - Covered by repository integration and migration integration tests.
+- `services/api/migrations/versions/0001_initial_dossier_core.up.sql` - Initial forward SQL migration for dossier core schema.
+  - public surface / key exports:
+    - Creates `dossiers`, `search_requests`, and supporting indexes.
+  - invariants / assumptions:
+    - `search_requests` references tenant-scoped dossier composite key.
+  - dependencies:
+    - Executed by migration helper in storage layer.
+  - tests:
+    - Covered by `services/api/tests/test_migrations_integration.py`.
+- `services/api/migrations/versions/0001_initial_dossier_core.down.sql` - Initial rollback SQL migration for dossier core schema.
+  - public surface / key exports:
+    - Drops indexes/tables created by the forward migration.
+  - invariants / assumptions:
+    - Rollback order preserves FK teardown safety.
+  - dependencies:
+    - Executed by migration helper in storage layer.
+  - tests:
+    - Covered by `services/api/tests/test_migrations_integration.py`.
 - `services/api/src/decider_api/application/entitlements.py` - In-memory entitlement management and audit metadata builder.
   - public surface / key exports:
     - Resolves effective module entitlements.
@@ -558,11 +630,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `uv run --directory services/api uvicorn decider_api.app:app --host 0.0.0.0 --port 8000`
     - `GET /api/v1/health` must return `{ "status": "ok" }`
     - checked-in contract file is `services/api/openapi/openapi.v1.json`
+  - Validate T8 storage migration/tests:
+    - `uv run --directory services/api pytest -q services/api/tests/test_migrations_integration.py`
+    - `uv run --directory services/api pytest -q services/api/tests/test_dossier_repository_integration.py services/api/tests/test_search_request_repository_integration.py`
 
 ---
 
 ## Map changelog (most recent first)
 - 2026-02-26 [T9] Added `POST /api/v1/tenants/{tenant_id}/exports` with strict tenant + `export:data` scope gate, metadata-only export audit events for success/forbidden attempts, smoke coverage for positive/negative export flow, and synced OpenAPI v1 contract.
+- 2026-02-25 [T8] Added dossier core storage baseline: tenant-scoped domain models/repository abstractions for `dossiers` and `search_requests`, SQLite repository implementations, initial SQL migration set with rollback script, and integration tests for repository behavior + migration up/down validation.
 - 2026-02-25 [T7] Added server-side entitlement management APIs (`GET/PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`), module-level access enforcement on tenant resources, audit metadata for entitlement mutations, and frontend module visibility alignment with backend `module_entitlements` response.
 - 2026-02-25 [mcp-fix] Updated project MCP config (`.codex/config.toml`) for filesystem server startup compatibility in restricted-network environments (direct `node` entrypoint + repo absolute allowed-directory path).
 - 2026-02-25 [T6] Enforced tenant isolation guardrails on `GET /api/v1/tenants/{tenant_id}/resources` with backend bearer auth dependency, explicit cross-tenant `403` denial tests, and aligned backend test imports after rebase on `main`.
