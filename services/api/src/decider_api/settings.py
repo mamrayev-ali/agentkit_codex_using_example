@@ -30,6 +30,11 @@ class AppSettings:
     ingestion_http_timeout_seconds: float = 5.0
     ingestion_http_max_retries: int = 2
     ingestion_http_backoff_seconds: float = 0.25
+    observability_log_level: str = "INFO"
+    observability_correlation_header: str = "X-Correlation-ID"
+    observability_enable_request_logging: bool = True
+    observability_enable_metrics: bool = True
+    observability_enable_exception_reporting: bool = True
 
 
 @lru_cache(maxsize=1)
@@ -70,5 +75,19 @@ def get_settings() -> AppSettings:
         ),
         ingestion_http_backoff_seconds=float(
             os.getenv("DECIDER_INGESTION_HTTP_BACKOFF_SECONDS", "0.25")
+        ),
+        observability_log_level=os.getenv("DECIDER_OBSERVABILITY_LOG_LEVEL", "INFO"),
+        observability_correlation_header=os.getenv(
+            "DECIDER_OBSERVABILITY_CORRELATION_HEADER",
+            "X-Correlation-ID",
+        ),
+        observability_enable_request_logging=_parse_bool(
+            os.getenv("DECIDER_OBSERVABILITY_ENABLE_REQUEST_LOGGING", "true")
+        ),
+        observability_enable_metrics=_parse_bool(
+            os.getenv("DECIDER_OBSERVABILITY_ENABLE_METRICS", "true")
+        ),
+        observability_enable_exception_reporting=_parse_bool(
+            os.getenv("DECIDER_OBSERVABILITY_ENABLE_EXCEPTION_REPORTING", "true")
         ),
     )
