@@ -13,6 +13,8 @@ from decider_api.application.exports import (
 )
 from test_auth_context_authn import _VALID_TOKEN, _build_validator
 
+pytestmark = [pytest.mark.e2e_api]
+
 
 @pytest.fixture(autouse=True)
 def _reset_state() -> None:
