@@ -19,7 +19,130 @@ services:
       - ./:/workspace
       - dev-pnpm-store:/pnpm-store
       - dev-pip-cache:/home/vscode/.cache/pip
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["runtime"]
+    container_name: decider-postgres
+    environment:
+      POSTGRES_DB: decider
+      POSTGRES_USER: decider
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - runtime-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U decider -d decider"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    profiles: ["runtime"]
+    container_name: decider-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    profiles: ["runtime"]
+    container_name: decider-keycloak
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${DECIDER_KEYCLOAK_ADMIN_USER:-}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${DECIDER_KEYCLOAK_ADMIN_PASSWORD:-}
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/keycloak/realm-decider-local.json:/opt/keycloak/data/import/realm-decider-local.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  keycloak-bootstrap:
+    image: quay.io/keycloak/keycloak:26.0
+    profiles: ["runtime"]
+    container_name: decider-keycloak-bootstrap
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      DECIDER_KEYCLOAK_REALM: decider-local
+      DECIDER_KEYCLOAK_ADMIN_USER: ${DECIDER_KEYCLOAK_ADMIN_USER:-}
+      DECIDER_KEYCLOAK_ADMIN_PASSWORD: ${DECIDER_KEYCLOAK_ADMIN_PASSWORD:-}
+      DECIDER_KEYCLOAK_DEMO_USER_PASSWORD: ${DECIDER_KEYCLOAK_DEMO_USER_PASSWORD:-}
+      DECIDER_KEYCLOAK_DEMO_ADMIN_PASSWORD: ${DECIDER_KEYCLOAK_DEMO_ADMIN_PASSWORD:-}
+    volumes:
+      - ./docker/keycloak/bootstrap.sh:/bootstrap/bootstrap.sh:ro
+    entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
+    restart: "no"
+
+  api:
+    profiles: ["runtime"]
+    container_name: decider-api
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      DECIDER_KEYCLOAK_ISSUER: http://localhost:8080/realms/decider-local
+      DECIDER_KEYCLOAK_AUDIENCE: decider-api
+      DECIDER_KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/decider-local/protocol/openid-connect/certs
+      DECIDER_KEYCLOAK_TENANT_CLAIMS: tenant_id,tenant,org_id
+      DECIDER_INGESTION_TASK_BROKER_URL: redis://redis:6379/0
+      DECIDER_INGESTION_TASK_BACKEND_URL: redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
+    ports:
+      - "${DECIDER_LOCAL_API_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=2)\"",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    profiles: ["runtime"]
+    container_name: decider-frontend
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "4200:4200"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:4200').then((response)=>{if(!response.ok){process.exit(1)}}).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
 volumes:
   dev-pnpm-store:
   dev-pip-cache:
+  runtime-postgres-data:

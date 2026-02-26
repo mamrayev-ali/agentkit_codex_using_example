@@ -18,6 +18,22 @@ OpenAPI source of truth:
 
 - `services/api/openapi/openapi.v1.json`
 
+## Auth runtime settings (Keycloak)
+
+The API supports two JWKS configuration modes:
+
+- Static JWKS JSON:
+  - `DECIDER_KEYCLOAK_JWKS_JSON`
+- JWKS URL (recommended for local runtime stack):
+  - `DECIDER_KEYCLOAK_JWKS_URL`
+  - `DECIDER_KEYCLOAK_JWKS_TIMEOUT_SECONDS` (default: `5.0`)
+
+Shared auth settings:
+
+- `DECIDER_KEYCLOAK_ISSUER`
+- `DECIDER_KEYCLOAK_AUDIENCE`
+- `DECIDER_KEYCLOAK_TENANT_CLAIMS`
+
 ## Test
 
 ```powershell

@@ -23,6 +23,8 @@ class AppSettings:
     keycloak_issuer: str = ""
     keycloak_audience: str = ""
     keycloak_jwks_json: str = ""
+    keycloak_jwks_url: str = ""
+    keycloak_jwks_timeout_seconds: float = 5.0
     keycloak_tenant_claim_names: tuple[str, ...] = ("tenant_id", "tenant", "org_id")
     ingestion_task_always_eager: bool = True
     ingestion_task_broker_url: str = "memory://"
@@ -50,6 +52,10 @@ def get_settings() -> AppSettings:
         keycloak_issuer=os.getenv("DECIDER_KEYCLOAK_ISSUER", ""),
         keycloak_audience=os.getenv("DECIDER_KEYCLOAK_AUDIENCE", ""),
         keycloak_jwks_json=os.getenv("DECIDER_KEYCLOAK_JWKS_JSON", ""),
+        keycloak_jwks_url=os.getenv("DECIDER_KEYCLOAK_JWKS_URL", ""),
+        keycloak_jwks_timeout_seconds=float(
+            os.getenv("DECIDER_KEYCLOAK_JWKS_TIMEOUT_SECONDS", "5.0")
+        ),
         keycloak_tenant_claim_names=_parse_csv(
             os.getenv(
                 "DECIDER_KEYCLOAK_TENANT_CLAIMS",

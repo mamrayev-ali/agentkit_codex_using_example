@@ -1,0 +1,17 @@
+.git
+.gitignore
+logs/
+.pnpm-store/
+.uv-cache/
+
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/.angular/
+
+services/api/.venv/
+services/api/.pytest_cache/
+services/api/pytest-cache-files-*/
+
+**/__pycache__/
+**/*.pyc

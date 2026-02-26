@@ -1,3 +1,5 @@
+import json
+import urllib.error
 from typing import Final
 
 import pytest
@@ -101,6 +103,68 @@ def _build_validator(now: int = _FIXED_NOW) -> KeycloakTokenValidator:
         },
         now_provider=lambda: float(now),
     )
+
+
+def test_token_validator_can_load_jwks_from_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResponse:
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def getcode(self) -> int:
+            return 200
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "keys": [
+                        {
+                            "kty": "RSA",
+                            "kid": _KID,
+                            "alg": "RS256",
+                            "use": "sig",
+                            "n": _N_B64,
+                            "e": "AQAB",
+                        }
+                    ]
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(url: str, timeout: float) -> _FakeResponse:
+        assert url == "https://keycloak.example/realms/decider/protocol/openid-connect/certs"
+        assert timeout == 2.5
+        return _FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+    validator = KeycloakTokenValidator.from_jwks_url(
+        issuer=_ISSUER,
+        audience=_AUDIENCE,
+        tenant_claim_names=("tenant_id", "tenant", "org_id"),
+        jwks_url="https://keycloak.example/realms/decider/protocol/openid-connect/certs",
+        timeout_seconds=2.5,
+        now_provider=lambda: float(_FIXED_NOW),
+    )
+
+    claims = validator.validate_token(_VALID_TOKEN)
+    assert claims["sub"] == "user-123"
+
+
+def test_token_validator_rejects_unreachable_jwks_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_urlopen(url: str, timeout: float) -> None:
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+    with pytest.raises(TokenValidationError, match="fetch JWKS"):
+        KeycloakTokenValidator.from_jwks_url(
+            issuer=_ISSUER,
+            audience=_AUDIENCE,
+            tenant_claim_names=("tenant_id", "tenant", "org_id"),
+            jwks_url="https://keycloak.example/realms/decider/protocol/openid-connect/certs",
+        )
 
 
 def test_token_validator_rejects_invalid_issuer() -> None:

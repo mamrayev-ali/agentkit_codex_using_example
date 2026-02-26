@@ -15,6 +15,7 @@ htmlcov/
 # Node artifacts (recommended)
 node_modules/
 .pnpm-store/
+.env.runtime
 
 # Common caches (recommended)
 __pycache__/

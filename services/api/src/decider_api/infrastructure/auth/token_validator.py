@@ -4,6 +4,8 @@ import hashlib
 import hmac
 import json
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Final, Mapping
 
@@ -171,6 +173,43 @@ class KeycloakTokenValidator:
             raise TokenValidationError("JWKS JSON is malformed.") from exc
         if not isinstance(document, dict):
             raise TokenValidationError("JWKS JSON must decode to an object.")
+        return cls.from_jwks(
+            issuer=issuer,
+            audience=audience,
+            tenant_claim_names=tenant_claim_names,
+            jwks_document=document,
+            now_provider=now_provider,
+        )
+
+    @classmethod
+    def from_jwks_url(
+        cls,
+        *,
+        issuer: str,
+        audience: str,
+        tenant_claim_names: tuple[str, ...],
+        jwks_url: str,
+        timeout_seconds: float = 5.0,
+        now_provider: Callable[[], float] = time.time,
+    ) -> "KeycloakTokenValidator":
+        if not jwks_url:
+            raise TokenValidationError("JWKS URL is not configured.")
+        try:
+            with urllib.request.urlopen(jwks_url, timeout=timeout_seconds) as response:
+                status_code = response.getcode()
+                if status_code is not None and status_code >= 400:
+                    raise TokenValidationError("JWKS endpoint returned an error status.")
+                payload = response.read()
+        except urllib.error.URLError as exc:
+            raise TokenValidationError("Unable to fetch JWKS document.") from exc
+
+        try:
+            document = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TokenValidationError("JWKS response is malformed.") from exc
+        if not isinstance(document, dict):
+            raise TokenValidationError("JWKS response must decode to an object.")
+
         return cls.from_jwks(
             issuer=issuer,
             audience=audience,
