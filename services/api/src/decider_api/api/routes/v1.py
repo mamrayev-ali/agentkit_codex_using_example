@@ -4,13 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from decider_api.api.dependencies.auth import get_authenticated_auth_context
 from decider_api.api.schemas.v1 import (
+    AuditEventResponse,
     AuthContextResponse,
     EntitlementsResponse,
     EntitlementsUpdateRequest,
     ExportResponse,
     HealthResponse,
+    TenantAuditEventsResponse,
     TenantResourcesResponse,
 )
+from decider_api.application.audit import list_audit_events_for_tenant
 from decider_api.application.entitlements import (
     get_managed_modules,
     resolve_modules_from_auth_context,
@@ -226,3 +229,26 @@ def put_tenant_entitlements_v1(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+
+
+@router.get(
+    "/tenants/{tenant_id}/audit/events",
+    response_model=TenantAuditEventsResponse,
+    responses={
+        401: {"description": "Invalid or expired token."},
+        403: {"description": "Forbidden"},
+    },
+)
+def get_tenant_audit_events_v1(
+    tenant_id: str,
+    auth_context: Annotated[dict[str, object], Depends(get_authenticated_auth_context)],
+) -> dict[str, object]:
+    _assert_tenant_access(tenant_id=tenant_id, auth_context=auth_context)
+    _assert_admin_access(auth_context)
+
+    events = list_audit_events_for_tenant(tenant_id=tenant_id)
+    validated_events = [AuditEventResponse.model_validate(item) for item in events]
+    return {
+        "tenant_id": tenant_id,
+        "events": [item.model_dump() for item in validated_events],
+    }

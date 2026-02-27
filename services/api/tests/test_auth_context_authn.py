@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from decider_api.api.dependencies.auth import get_token_validator
 from decider_api.app import app
+from decider_api.application.entitlements import reset_entitlements_state
+from decider_api.application.exports import reset_export_state
 from decider_api.infrastructure.auth.token_validator import (
     KeycloakTokenValidator,
     TokenValidationError,
@@ -82,6 +84,15 @@ _MISSING_TENANT_TOKEN: Final[str] = (
     "5mtSC1I9YezR3h2qLXq_9LKEgPcLrPHySVRP-VDAoneA70i4vBrM9jA6Z2XmVvts2nCOuRvZ2nPF"
     "rzo41pTdFd2PF4CKrCU"
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_state() -> None:
+    reset_entitlements_state()
+    reset_export_state()
+    yield
+    reset_entitlements_state()
+    reset_export_state()
 
 
 def _build_validator(now: int = _FIXED_NOW) -> KeycloakTokenValidator:

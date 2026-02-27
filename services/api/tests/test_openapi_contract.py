@@ -15,6 +15,7 @@ REQUIRED_V1_PATHS = {
     "/api/v1/tenants/{tenant_id}/resources",
     "/api/v1/tenants/{tenant_id}/exports",
     "/api/v1/tenants/{tenant_id}/entitlements/{subject}",
+    "/api/v1/tenants/{tenant_id}/audit/events",
 }
 
 

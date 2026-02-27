@@ -4,6 +4,7 @@ from decider_api.application.entitlements import (
     update_managed_modules,
 )
 from decider_api.application.tenant_resources import list_tenant_base_resources
+from decider_api.infrastructure.storage import clear_runtime_storage_cache
 
 
 def setup_function() -> None:
@@ -107,3 +108,26 @@ def test_tenant_resources_response_is_immutable_between_calls() -> None:
         "tenant_id": "acme",
         "resources": [],
     }
+
+
+def test_managed_entitlements_persist_across_runtime_cache_reset() -> None:
+    update_managed_modules(
+        tenant_id="acme",
+        subject="user-123",
+        enabled_modules=["dashboard"],
+        actor_subject="admin-1",
+    )
+    clear_runtime_storage_cache()
+
+    claims = {
+        "sub": "user-123",
+        "tenant_id": "acme",
+        "scope": "read:data watchlist:view",
+        "roles": ["user"],
+    }
+    response = build_auth_context_response(
+        claims=claims,
+        tenant_claim_names=("tenant_id",),
+    )
+
+    assert response["module_entitlements"] == ["dashboard"]

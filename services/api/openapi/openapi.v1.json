@@ -1,437 +1,42 @@
 {
-  "components": {
-    "schemas": {
-      "AuthContextResponse": {
-        "properties": {
-          "authenticated": {
-            "title": "Authenticated",
-            "type": "boolean"
-          },
-          "module_entitlements": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Module Entitlements",
-            "type": "array"
-          },
-          "roles": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Roles",
-            "type": "array"
-          },
-          "scopes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Scopes",
-            "type": "array"
-          },
-          "subject": {
-            "title": "Subject",
-            "type": "string"
-          },
-          "tenant_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tenant Id"
-          }
-        },
-        "required": [
-          "authenticated",
-          "subject",
-          "tenant_id"
-        ],
-        "title": "AuthContextResponse",
-        "type": "object"
-      },
-      "EntitlementAuditMetadata": {
-        "properties": {
-          "action": {
-            "const": "entitlements.updated",
-            "title": "Action",
-            "type": "string"
-          },
-          "actor_subject": {
-            "title": "Actor Subject",
-            "type": "string"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "target_subject": {
-            "title": "Target Subject",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "event_id",
-          "action",
-          "actor_subject",
-          "target_subject",
-          "tenant_id",
-          "occurred_at"
-        ],
-        "title": "EntitlementAuditMetadata",
-        "type": "object"
-      },
-      "EntitlementsResponse": {
-        "properties": {
-          "audit_metadata": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EntitlementAuditMetadata"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "enabled_modules": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Enabled Modules",
-            "type": "array"
-          },
-          "subject": {
-            "title": "Subject",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "subject"
-        ],
-        "title": "EntitlementsResponse",
-        "type": "object"
-      },
-      "EntitlementsUpdateRequest": {
-        "properties": {
-          "enabled_modules": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Enabled Modules",
-            "type": "array"
-          }
-        },
-        "title": "EntitlementsUpdateRequest",
-        "type": "object"
-      },
-      "ExportAuditMetadata": {
-        "properties": {
-          "action": {
-            "const": "export.requested",
-            "title": "Action",
-            "type": "string"
-          },
-          "actor_subject": {
-            "title": "Actor Subject",
-            "type": "string"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "occurred_at": {
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "outcome": {
-            "enum": [
-              "success",
-              "forbidden"
-            ],
-            "title": "Outcome",
-            "type": "string"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "event_id",
-          "action",
-          "actor_subject",
-          "tenant_id",
-          "outcome",
-          "occurred_at"
-        ],
-        "title": "ExportAuditMetadata",
-        "type": "object"
-      },
-      "ExportResponse": {
-        "properties": {
-          "audit_metadata": {
-            "$ref": "#/components/schemas/ExportAuditMetadata"
-          },
-          "export_id": {
-            "title": "Export Id",
-            "type": "string"
-          },
-          "status": {
-            "const": "accepted",
-            "title": "Status",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "export_id",
-          "status",
-          "audit_metadata"
-        ],
-        "title": "ExportResponse",
-        "type": "object"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "HealthResponse": {
-        "properties": {
-          "status": {
-            "const": "ok",
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "HealthResponse",
-        "type": "object"
-      },
-      "TenantBaseResource": {
-        "properties": {
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "resource_id": {
-            "title": "Resource Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "resource_id",
-          "name"
-        ],
-        "title": "TenantBaseResource",
-        "type": "object"
-      },
-      "TenantResourcesResponse": {
-        "properties": {
-          "resources": {
-            "items": {
-              "$ref": "#/components/schemas/TenantBaseResource"
-            },
-            "title": "Resources",
-            "type": "array"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id"
-        ],
-        "title": "TenantResourcesResponse",
-        "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
-      }
-    }
-  },
+  "openapi": "3.1.0",
   "info": {
     "title": "Decider API",
     "version": "1.0.0"
   },
-  "openapi": "3.1.0",
   "paths": {
-    "/api/v1/auth/context": {
-      "get": {
-        "operationId": "get_auth_context_v1_api_v1_auth_context_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthContextResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "description": "Invalid or expired token."
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Auth Context V1",
-        "tags": [
-          "v1"
-        ]
-      }
-    },
     "/api/v1/health": {
       "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Health V1",
         "operationId": "get_health_v1_api_v1_health_get",
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           }
-        },
-        "summary": "Get Health V1",
-        "tags": [
-          "v1"
-        ]
+        }
       }
     },
-    "/api/v1/tenants/{tenant_id}/entitlements/{subject}": {
+    "/api/v1/auth/context": {
       "get": {
-        "operationId": "get_tenant_entitlements_v1_api_v1_tenants__tenant_id__entitlements__subject__get",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Auth Context V1",
+        "operationId": "get_auth_context_v1_api_v1_auth_context_get",
         "parameters": [
           {
-            "in": "path",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "subject",
-            "required": true,
-            "schema": {
-              "title": "Subject",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
             "name": "authorization",
+            "in": "header",
             "required": false,
             "schema": {
               "anyOf": [
@@ -448,14 +53,75 @@
         ],
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EntitlementsResponse"
+                  "$ref": "#/components/schemas/AuthContextResponse"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/resources": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Resources V1",
+        "operationId": "get_tenant_resources_v1_api_v1_tenants__tenant_id__resources_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResourcesResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Invalid or expired token."
@@ -464,45 +130,182 @@
             "description": "Forbidden"
           },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
+            }
           }
-        },
-        "summary": "Get Tenant Entitlements V1",
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/exports": {
+      "post": {
         "tags": [
           "v1"
-        ]
+        ],
+        "summary": "Post Tenant Export V1",
+        "operationId": "post_tenant_export_v1_api_v1_tenants__tenant_id__exports_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/entitlements/{subject}": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Entitlements V1",
+        "operationId": "get_tenant_entitlements_v1_api_v1_tenants__tenant_id__entitlements__subject__get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subject"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Put Tenant Entitlements V1",
         "operationId": "put_tenant_entitlements_v1_api_v1_tenants__tenant_id__entitlements__subject__put",
         "parameters": [
           {
-            "in": "path",
             "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "string"
-            }
-          },
-          {
             "in": "path",
-            "name": "subject",
             "required": true,
             "schema": {
-              "title": "Subject",
-              "type": "string"
+              "type": "string",
+              "title": "Tenant Id"
             }
           },
           {
-            "in": "header",
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subject"
+            }
+          },
+          {
             "name": "authorization",
+            "in": "header",
             "required": false,
             "schema": {
               "anyOf": [
@@ -518,25 +321,25 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/EntitlementsUpdateRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EntitlementsResponse"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "401": {
             "description": "Invalid or expired token."
@@ -547,93 +350,29 @@
           "422": {
             "description": "Validation error."
           }
-        },
-        "summary": "Put Tenant Entitlements V1",
-        "tags": [
-          "v1"
-        ]
+        }
       }
     },
-    "/api/v1/tenants/{tenant_id}/exports": {
-      "post": {
-        "operationId": "post_tenant_export_v1_api_v1_tenants__tenant_id__exports_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExportResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "description": "Invalid or expired token."
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Post Tenant Export V1",
-        "tags": [
-          "v1"
-        ]
-      }
-    },
-    "/api/v1/tenants/{tenant_id}/resources": {
+    "/api/v1/tenants/{tenant_id}/audit/events": {
       "get": {
-        "operationId": "get_tenant_resources_v1_api_v1_tenants__tenant_id__resources_get",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Audit Events V1",
+        "operationId": "get_tenant_audit_events_v1_api_v1_tenants__tenant_id__audit_events_get",
         "parameters": [
           {
-            "in": "path",
             "name": "tenant_id",
+            "in": "path",
             "required": true,
             "schema": {
-              "title": "Tenant Id",
-              "type": "string"
+              "type": "string",
+              "title": "Tenant Id"
             }
           },
           {
-            "in": "header",
             "name": "authorization",
+            "in": "header",
             "required": false,
             "schema": {
               "anyOf": [
@@ -650,14 +389,14 @@
         ],
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantResourcesResponse"
+                  "$ref": "#/components/schemas/TenantAuditEventsResponse"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "401": {
             "description": "Invalid or expired token."
@@ -666,20 +405,433 @@
             "description": "Forbidden"
           },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuditEventResponse": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "entitlements.updated",
+              "export.requested"
+            ],
+            "title": "Action"
+          },
+          "actor_subject": {
+            "type": "string",
+            "title": "Actor Subject"
+          },
+          "target_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Subject"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "forbidden"
+            ],
+            "title": "Outcome"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
-        "summary": "Get Tenant Resources V1",
-        "tags": [
-          "v1"
-        ]
+        "type": "object",
+        "required": [
+          "event_id",
+          "action",
+          "actor_subject",
+          "tenant_id",
+          "outcome",
+          "occurred_at"
+        ],
+        "title": "AuditEventResponse"
+      },
+      "AuthContextResponse": {
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "title": "Authenticated"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "module_entitlements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Module Entitlements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "authenticated",
+          "subject",
+          "tenant_id"
+        ],
+        "title": "AuthContextResponse"
+      },
+      "EntitlementAuditMetadata": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "action": {
+            "type": "string",
+            "const": "entitlements.updated",
+            "title": "Action"
+          },
+          "actor_subject": {
+            "type": "string",
+            "title": "Actor Subject"
+          },
+          "target_subject": {
+            "type": "string",
+            "title": "Target Subject"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "action",
+          "actor_subject",
+          "target_subject",
+          "tenant_id",
+          "occurred_at"
+        ],
+        "title": "EntitlementAuditMetadata"
+      },
+      "EntitlementsResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "enabled_modules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Modules"
+          },
+          "audit_metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitlementAuditMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "subject"
+        ],
+        "title": "EntitlementsResponse"
+      },
+      "EntitlementsUpdateRequest": {
+        "properties": {
+          "enabled_modules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Modules"
+          }
+        },
+        "type": "object",
+        "title": "EntitlementsUpdateRequest"
+      },
+      "ExportAuditMetadata": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "action": {
+            "type": "string",
+            "const": "export.requested",
+            "title": "Action"
+          },
+          "actor_subject": {
+            "type": "string",
+            "title": "Actor Subject"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "forbidden"
+            ],
+            "title": "Outcome"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "action",
+          "actor_subject",
+          "tenant_id",
+          "outcome",
+          "occurred_at"
+        ],
+        "title": "ExportAuditMetadata"
+      },
+      "ExportResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "export_id": {
+            "type": "string",
+            "title": "Export Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "accepted",
+            "title": "Status"
+          },
+          "audit_metadata": {
+            "$ref": "#/components/schemas/ExportAuditMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "export_id",
+          "status",
+          "audit_metadata"
+        ],
+        "title": "ExportResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "TenantAuditEventsResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventResponse"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id"
+        ],
+        "title": "TenantAuditEventsResponse"
+      },
+      "TenantBaseResource": {
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "title": "Resource Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource_id",
+          "name"
+        ],
+        "title": "TenantBaseResource"
+      },
+      "TenantResourcesResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/TenantBaseResource"
+            },
+            "type": "array",
+            "title": "Resources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id"
+        ],
+        "title": "TenantResourcesResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
       }
     }
   }

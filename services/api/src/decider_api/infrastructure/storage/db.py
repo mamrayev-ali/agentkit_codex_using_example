@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 
 _SQLITE_SCHEME_PREFIX = "sqlite:///"
@@ -19,6 +20,11 @@ def _sqlite_path_from_database_url(database_url: str) -> str:
 
 def create_sqlite_connection(database_url: str) -> sqlite3.Connection:
     path = _sqlite_path_from_database_url(database_url)
+    if path != ":memory:":
+        database_path = Path(path)
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        path = str(database_path)
+
     connection = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")

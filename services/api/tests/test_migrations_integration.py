@@ -20,6 +20,8 @@ def test_initial_schema_migration_creates_core_tables() -> None:
 
     assert _table_exists(connection, "dossiers")
     assert _table_exists(connection, "search_requests")
+    assert _table_exists(connection, "managed_entitlements")
+    assert _table_exists(connection, "audit_events")
 
 
 def test_initial_schema_rollback_drops_core_tables() -> None:
@@ -28,5 +30,7 @@ def test_initial_schema_rollback_drops_core_tables() -> None:
 
     rollback_initial_schema(connection)
 
+    assert not _table_exists(connection, "audit_events")
+    assert not _table_exists(connection, "managed_entitlements")
     assert not _table_exists(connection, "search_requests")
     assert not _table_exists(connection, "dossiers")
