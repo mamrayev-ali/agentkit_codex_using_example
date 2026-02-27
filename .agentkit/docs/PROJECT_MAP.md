@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`).
-  - Target product stack (planned next): frontend OIDC flow integration, persistent entitlement/audit storage, and full user/admin walkthrough automation (ROADMAP T14-T20).
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context).
+  - Target product stack (planned next): persistent entitlement/audit storage and full user/admin walkthrough automation (ROADMAP T15-T20).
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -59,11 +59,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
   - Current tracked state:
-    - Standalone Angular app with route skeleton: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
-    - App shell navigation visibility is aligned with backend `module_entitlements` response shape.
+    - Standalone Angular app with auth-aware routes: `/login`, `/auth/callback`, protected `/dashboard`, `/dossiers`, `/watchlist`, and guarded fallback `/**`.
+    - OIDC Authorization Code + PKCE flow is implemented in frontend auth services (`auth.service`, `auth-context.service`, `token-storage.service`, `pkce`) with Keycloak endpoints from environment config.
+    - Session lifecycle is enforced in client guards (`auth`, `anonymous`, `module`) with 401/session-expiry fallback to re-login.
+    - App shell navigation visibility is driven by normalized backend `module_entitlements` from `/api/v1/auth/context`.
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
-    - Playwright config and smoke e2e route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`.
+    - Playwright config and smoke e2e auth-route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`.
 - `.github/workflows/` - CI gates and release-ready enforcement.
   - Current tracked state:
     - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, security scans, and final release gate job.
@@ -92,6 +94,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Core dossier storage operations are tenant-scoped at repository query boundaries (`tenant_id` included in keys/lookups).
   - Ingestion remote-fetch foundation enforces SSRF-safe URL policy before outbound HTTP requests.
   - Frontend shell consumes backend entitlement shape for module visibility decisions.
+  - Frontend route access is guarded by authenticated session state and required module entitlement checks; backend remains authorization source of truth.
 - Error handling strategy:
   - Verification scripts fail fast and stop on unmet prerequisites.
   - No placeholder pass paths are allowed.
@@ -158,10 +161,18 @@ It explains what exists now, what contracts are enforced, and where new work sho
 
 ## 6) Frontend / UI surface (if applicable)
 - Routing approach:
-  - Implemented shell routes: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+  - Public auth routes: `/login`, `/auth/callback`.
+  - Protected shell routes: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+  - Route guards:
+    - `authGuard` redirects unauthenticated access to `/login` with `redirectTo`.
+    - `anonymousGuard` redirects authenticated users away from login/callback to `/dashboard`.
+    - `moduleGuard` enforces per-route `requiredModule` and redirects forbidden access to `/dashboard`.
   - Uses standalone components + lazy `loadComponent`.
 - State management approach:
+  - Auth/session state is held in Angular signals inside `AuthService`.
+  - Session token payload is stored in `sessionStorage` (`decider.auth.session.v1`) with pending PKCE login state key (`decider.auth.pending-login.v1`).
   - Shell keeps lightweight module visibility state derived from backend auth-context payload (`module_entitlements`).
+  - `AuthContextService` normalizes backend payload (`tenant_id`, `roles`, `scopes`, `module_entitlements`) into frontend-safe shape.
   - Environment metadata remains read-only from `src/environments/*`.
 - Where styles/tokens live:
   - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
@@ -210,6 +221,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - T11 observability coverage includes:
     - correlation-id normalization/generation and structured formatter behavior (`services/api/tests/test_observability_unit.py`)
     - request correlation header propagation, `/metrics` exposure, and request lifecycle log fields (`services/api/tests/test_observability_http.py`)
+  - T14 frontend auth coverage includes:
+    - OIDC URL generation + callback/session handling (`frontend/src/app/auth/auth.service.spec.ts`)
+    - Guard redirect behavior for unauthenticated/forbidden states (`frontend/src/app/auth/guards.spec.ts`)
+    - Route contract assertions for auth + protected routes (`frontend/src/app/app.routes.spec.ts`)
+    - E2E route smoke for unauthenticated redirects and authenticated shell rendering (`frontend/e2e/shell-routes.spec.ts`)
 - Windows evidence policy (source of truth for local verification on this repo):
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 smoke`
   - Required (host entrypoint): `pwsh -File .agentkit/scripts/verify.ps1 local`
@@ -1027,6 +1043,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+- 2026-02-27 [T14] Added frontend OIDC Authorization Code + PKCE integration for Keycloak: new login/callback pages, auth/session services (`auth.service`, `auth-context.service`, `token-storage`, `pkce`), route guards (`auth`, `anonymous`, `module`) for protected routes, shell/logout wiring to real backend auth-context entitlements, and expanded frontend unit/e2e auth-route tests.
 - 2026-02-26 [T13] Added local runtime walkthrough profile in `docker-compose.dev.yml` (`frontend`, `api`, `postgres`, `redis`, `keycloak`, `keycloak-bootstrap`), introduced runtime Dockerfiles/bootstrap artifacts (`docker/api.Dockerfile`, `docker/frontend.Dockerfile`, `docker/keycloak/*`), added Keycloak JWKS URL auth mode in API settings/dependencies, added configurable API host-port binding (`DECIDER_LOCAL_API_PORT`), and documented one-command runtime runbook in `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
 - 2026-02-26 [ui-kit-file-import] Moved user-provided UI kit stylesheet into frontend source tree as `frontend/src/styles/ui-kit.css` and wired global import in `frontend/src/styles.css` for upcoming UI implementation tickets.
 - 2026-02-26 [ui-uikit-rules] Added project-local frontend UI kit governance rules (`.agentkit/rules/local/frontend-uikit.md`) covering token-only colors, required desktop/mobile layout behavior, registry view modes, tool card/details composition, dashboard blocks, form conventions, and table behavior.

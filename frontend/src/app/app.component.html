@@ -1,23 +1,37 @@
-<div class="shell">
-  <header class="shell__header">
-    <div class="shell__title">
-      <h1>{{ appName }}</h1>
-      <p>Frontend shell ({{ environmentName }})</p>
-    </div>
-    <nav class="shell__nav">
-      <a *ngIf="isModuleVisible('dashboard')" routerLink="/dashboard" routerLinkActive="active">
-        Dashboard
-      </a>
-      <a *ngIf="isModuleVisible('dossiers')" routerLink="/dossiers" routerLinkActive="active">
-        Dossiers
-      </a>
-      <a *ngIf="isModuleVisible('watchlist')" routerLink="/watchlist" routerLinkActive="active">
-        Watchlist
-      </a>
-    </nav>
-  </header>
+<ng-container *ngIf="isAuthenticated(); else unauthenticatedOutlet">
+  <div class="shell app-shell">
+    <header class="shell__header app-header">
+      <div class="shell__title">
+        <h1>{{ appName }}</h1>
+        <p>Tenant shell ({{ environmentName }})</p>
+        <p *ngIf="authContext() as context" class="shell__meta">
+          {{ context.subject }} · {{ context.tenantId }}
+        </p>
+      </div>
 
-  <main class="shell__content">
-    <router-outlet />
-  </main>
-</div>
+      <div class="shell__actions">
+        <nav class="shell__nav" aria-label="Primary">
+          <a *ngIf="isModuleVisible('dashboard')" routerLink="/dashboard" routerLinkActive="active">
+            Dashboard
+          </a>
+          <a *ngIf="isModuleVisible('dossiers')" routerLink="/dossiers" routerLinkActive="active">
+            Dossiers
+          </a>
+          <a *ngIf="isModuleVisible('watchlist')" routerLink="/watchlist" routerLinkActive="active">
+            Watchlist
+          </a>
+        </nav>
+
+        <button type="button" class="btn btn--secondary" (click)="logout()">Logout</button>
+      </div>
+    </header>
+
+    <main class="shell__content">
+      <router-outlet />
+    </main>
+  </div>
+</ng-container>
+
+<ng-template #unauthenticatedOutlet>
+  <router-outlet />
+</ng-template>
