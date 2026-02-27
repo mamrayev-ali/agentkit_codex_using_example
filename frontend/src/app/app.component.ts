@@ -1,7 +1,9 @@
 import { NgIf } from '@angular/common';
-import { Component } from '@angular/core';
+import { Inject, Component } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
 import { environment } from '../environments/environment';
+import { AuthService } from './auth/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -14,36 +16,23 @@ export class AppComponent {
   readonly appName = 'Decider';
   readonly environmentName = environment.name;
 
-  private moduleEntitlements: string[] = ['dashboard', 'dossiers', 'watchlist'];
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
-  applyAuthContext(authContext: { module_entitlements?: unknown }): void {
-    const nextModules = this.normalizeModuleEntitlements(authContext.module_entitlements);
-    this.moduleEntitlements = nextModules.length > 0 ? nextModules : ['dashboard'];
+  authContext() {
+    return this.authService.authContext();
+  }
+
+  isAuthenticated(): boolean {
+    return this.authService.isAuthenticated();
   }
 
   isModuleVisible(moduleKey: string): boolean {
-    return this.moduleEntitlements.includes(moduleKey);
+    return this.authService.hasModule(moduleKey);
   }
 
-  private normalizeModuleEntitlements(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    const normalized: string[] = [];
-    for (const moduleKey of value) {
-      if (typeof moduleKey !== 'string') {
-        continue;
-      }
-
-      const trimmed = moduleKey.trim().toLowerCase();
-      if (!trimmed || normalized.includes(trimmed)) {
-        continue;
-      }
-
-      normalized.push(trimmed);
-    }
-
-    return normalized;
+  logout(): void {
+    const logoutUrl = this.authService.createLogoutUrl();
+    this.authService.clearSession();
+    window.location.assign(logoutUrl);
   }
 }
