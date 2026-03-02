@@ -45,6 +45,7 @@ class SqliteManagedEntitlementRepository:
         enabled_modules: list[str],
         actor_subject: str,
         occurred_at: str,
+        commit: bool = True,
     ) -> None:
         serialized_modules = json.dumps(enabled_modules)
         self._connection.execute(
@@ -70,8 +71,10 @@ class SqliteManagedEntitlementRepository:
                 occurred_at,
             ),
         )
-        self._connection.commit()
+        if commit:
+            self._connection.commit()
 
-    def clear(self) -> None:
+    def clear(self, *, commit: bool = True) -> None:
         self._connection.execute("DELETE FROM managed_entitlements")
-        self._connection.commit()
+        if commit:
+            self._connection.commit()

@@ -53,6 +53,7 @@ class SqliteAuditEventRepository:
         occurred_at: str,
         target_subject: str | None = None,
         reason: str | None = None,
+        commit: bool = True,
     ) -> dict[str, str]:
         cursor = self._connection.execute(
             """
@@ -76,7 +77,8 @@ class SqliteAuditEventRepository:
                 occurred_at,
             ),
         )
-        self._connection.commit()
+        if commit:
+            self._connection.commit()
 
         audit_id = cursor.lastrowid
         if not isinstance(audit_id, int):
@@ -157,9 +159,10 @@ class SqliteAuditEventRepository:
         ).fetchall()
         return [_row_to_audit_event(row) for row in rows]
 
-    def clear_by_action(self, *, action: str) -> None:
+    def clear_by_action(self, *, action: str, commit: bool = True) -> None:
         self._connection.execute(
             "DELETE FROM audit_events WHERE action = ?",
             (action,),
         )
-        self._connection.commit()
+        if commit:
+            self._connection.commit()

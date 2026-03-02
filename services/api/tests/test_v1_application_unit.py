@@ -1,10 +1,15 @@
+import pytest
+
 from decider_api.application.auth_context import build_auth_context_response
 from decider_api.application.entitlements import (
     reset_entitlements_state,
     update_managed_modules,
 )
 from decider_api.application.tenant_resources import list_tenant_base_resources
-from decider_api.infrastructure.storage import clear_runtime_storage_cache
+from decider_api.infrastructure.storage import (
+    SqliteAuditEventRepository,
+    clear_runtime_storage_cache,
+)
 
 
 def setup_function() -> None:
@@ -131,3 +136,38 @@ def test_managed_entitlements_persist_across_runtime_cache_reset() -> None:
     )
 
     assert response["module_entitlements"] == ["dashboard"]
+
+
+def test_entitlement_update_rolls_back_when_audit_insert_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_create_event(self, **kwargs):
+        raise RuntimeError("audit insert failed")
+
+    monkeypatch.setattr(
+        SqliteAuditEventRepository,
+        "create_event",
+        _raise_create_event,
+    )
+
+    with pytest.raises(RuntimeError, match="audit insert failed"):
+        update_managed_modules(
+            tenant_id="acme",
+            subject="user-123",
+            enabled_modules=["dashboard", "watchlist"],
+            actor_subject="admin-1",
+        )
+
+    clear_runtime_storage_cache()
+    claims = {
+        "sub": "user-123",
+        "tenant_id": "acme",
+        "scope": "read:data watchlist:view",
+        "roles": ["user"],
+    }
+    response = build_auth_context_response(
+        claims=claims,
+        tenant_claim_names=("tenant_id",),
+    )
+
+    assert response["module_entitlements"] == ["dashboard", "dossiers", "watchlist"]

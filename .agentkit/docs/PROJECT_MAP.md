@@ -160,7 +160,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - SQL migration sets are tracked in:
     - `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`
     - `services/api/migrations/versions/0002_entitlements_audit_persistence.{up,down}.sql`
-  - Storage migration helper tracks applied versions via `schema_migrations` and supports idempotent runtime schema ensure.
+  - Storage migration helper tracks applied versions via `schema_migrations`, auto-adopts fully-present legacy schemas, and fails closed on partially-applied migration state.
   - Alembic-based linear migration history remains a planned follow-up.
 - Rollback approach:
   - Mandatory migration plan + rollback for any schema change.
@@ -734,6 +734,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Foreign keys are enabled (`PRAGMA foreign_keys = ON`).
     - Tenant scoping is enforced in query predicates.
     - Runtime schema ensure is idempotent via `schema_migrations`.
+    - Existing legacy schema is adopted only when the full expected artifact set is present for that migration version.
   - dependencies:
     - stdlib `sqlite3` and SQL migration scripts under `services/api/migrations/versions/`.
   - tests:
@@ -781,6 +782,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Resets persisted entitlement state for deterministic tests.
   - invariants / assumptions:
     - Managed updates override claim-derived defaults.
+    - Managed entitlement writes and entitlement audit writes commit in one SQLite transaction.
     - Returns immutable list copies to callers.
   - dependencies:
     - `decider_api.domain.permissions`, `decider_api.infrastructure.storage`, `decider_api.application.audit`.
@@ -1099,7 +1101,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
-- 2026-02-27 [T15] Replaced in-memory entitlement/export-audit state with persistent SQLite storage: added T15 migration set (`0002_entitlements_audit_persistence.{up,down}.sql`), idempotent migration tracking (`schema_migrations`), new storage repositories/runtime helpers, new admin endpoint `GET /api/v1/tenants/{tenant_id}/audit/events`, updated OpenAPI v1 contract, and expanded test coverage for persistence/queryability.
+  - 2026-03-02 [T15-fix] Closed remaining T15 gaps: made entitlement update + audit persistence transactional, hardened migration bootstrap so partial legacy schemas fail closed instead of being marked applied, restored the stable default SQLite path under `services/api/`, and aligned the Playwright auth-route expectation with the real `/login?redirectTo=...` redirect.
+  - 2026-02-27 [T15] Replaced in-memory entitlement/export-audit state with persistent SQLite storage: added T15 migration set (`0002_entitlements_audit_persistence.{up,down}.sql`), idempotent migration tracking (`schema_migrations`), new storage repositories/runtime helpers, new admin endpoint `GET /api/v1/tenants/{tenant_id}/audit/events`, updated OpenAPI v1 contract, and expanded test coverage for persistence/queryability.
 - 2026-02-27 [T14] Added frontend OIDC Authorization Code + PKCE integration for Keycloak: new login/callback pages, auth/session services (`auth.service`, `auth-context.service`, `token-storage`, `pkce`), route guards (`auth`, `anonymous`, `module`) for protected routes, shell/logout wiring to real backend auth-context entitlements, and expanded frontend unit/e2e auth-route tests.
 - 2026-02-26 [T13] Added local runtime walkthrough profile in `docker-compose.dev.yml` (`frontend`, `api`, `postgres`, `redis`, `keycloak`, `keycloak-bootstrap`), introduced runtime Dockerfiles/bootstrap artifacts (`docker/api.Dockerfile`, `docker/frontend.Dockerfile`, `docker/keycloak/*`), added Keycloak JWKS URL auth mode in API settings/dependencies, added configurable API host-port binding (`DECIDER_LOCAL_API_PORT`), and documented one-command runtime runbook in `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
 - 2026-02-26 [ui-kit-file-import] Moved user-provided UI kit stylesheet into frontend source tree as `frontend/src/styles/ui-kit.css` and wired global import in `frontend/src/styles.css` for upcoming UI implementation tickets.
@@ -1124,4 +1127,4 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - 2026-02-23 [T1] Replaced placeholder verify targets with a profile-aware verification contract (`Makefile`, `verify.sh`, `verify.ps1`, `verification_contract.py`) and documented Windows-first local evidence policy.
 - 2026-02-23 [project-intake-2026-02-23] Replaced template map with concrete repository memory and aligned it to the new roadmap baseline.
   - Database runtime tuning:
-    - `DECIDER_DATABASE_URL` (default `sqlite:///./decider.db`)
+    - `DECIDER_DATABASE_URL` (default: absolute SQLite path resolved to `services/api/decider.db`)

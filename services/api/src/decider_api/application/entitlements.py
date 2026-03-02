@@ -4,13 +4,13 @@ from datetime import datetime, timezone
 from decider_api.application.audit import (
     AUDIT_ACTION_ENTITLEMENTS_UPDATED,
     clear_audit_events_by_action,
-    record_audit_event,
 )
 from decider_api.domain.permissions import (
     default_modules_for_claims,
     normalize_modules,
 )
 from decider_api.infrastructure.storage import (
+    SqliteAuditEventRepository,
     SqliteManagedEntitlementRepository,
     run_with_storage_connection,
 )
@@ -81,20 +81,35 @@ def update_managed_modules(
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z")
     )
-    _upsert_managed_modules(
-        tenant_id=tenant_id,
-        subject=subject,
-        enabled_modules=normalized_modules,
-        actor_subject=actor_subject,
-        occurred_at=occurred_at,
-    )
-    audit_metadata = record_audit_event(
-        action=AUDIT_ACTION_ENTITLEMENTS_UPDATED,
-        tenant_id=tenant_id,
-        actor_subject=actor_subject,
-        target_subject=subject,
-        outcome="success",
-    )
+
+    def _operation(connection):
+        entitlement_repository = SqliteManagedEntitlementRepository(connection)
+        audit_repository = SqliteAuditEventRepository(connection)
+        try:
+            entitlement_repository.upsert_modules(
+                tenant_id=tenant_id,
+                subject=subject,
+                enabled_modules=normalized_modules,
+                actor_subject=actor_subject,
+                occurred_at=occurred_at,
+                commit=False,
+            )
+            audit_metadata = audit_repository.create_event(
+                action=AUDIT_ACTION_ENTITLEMENTS_UPDATED,
+                actor_subject=actor_subject,
+                target_subject=subject,
+                tenant_id=tenant_id,
+                outcome="success",
+                occurred_at=occurred_at,
+                commit=False,
+            )
+            connection.commit()
+            return audit_metadata
+        except Exception:
+            connection.rollback()
+            raise
+
+    audit_metadata = run_with_storage_connection(_operation)
 
     return {
         "tenant_id": tenant_id,

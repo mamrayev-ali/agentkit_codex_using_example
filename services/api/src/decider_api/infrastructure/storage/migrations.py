@@ -10,6 +10,20 @@ _MIGRATION_STEPS: tuple[tuple[str, str], ...] = (
     ),
 )
 _MIGRATION_TABLE_NAME = "schema_migrations"
+_EXPECTED_ARTIFACTS_BY_VERSION: dict[str, tuple[tuple[str, str], ...]] = {
+    "0001_initial_dossier_core": (
+        ("table", "dossiers"),
+        ("index", "idx_dossiers_tenant_created"),
+        ("table", "search_requests"),
+        ("index", "idx_search_requests_tenant_dossier"),
+    ),
+    "0002_entitlements_audit_persistence": (
+        ("table", "managed_entitlements"),
+        ("index", "idx_managed_entitlements_tenant"),
+        ("table", "audit_events"),
+        ("index", "idx_audit_events_tenant_occurred"),
+    ),
+}
 
 
 def migration_script_path(filename: str) -> Path:
@@ -66,17 +80,49 @@ def _mark_migration_rolled_back(connection: sqlite3.Connection, *, version: str)
     connection.commit()
 
 
+def _schema_artifact_exists(
+    connection: sqlite3.Connection,
+    *,
+    artifact_type: str,
+    name: str,
+) -> bool:
+    row = connection.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type = ? AND name = ?
+        """,
+        (artifact_type, name),
+    ).fetchone()
+    return row is not None
+
+
+def _expected_artifacts_exist(connection: sqlite3.Connection, *, version: str) -> bool:
+    expected_artifacts = _EXPECTED_ARTIFACTS_BY_VERSION.get(version, ())
+    return all(
+        _schema_artifact_exists(
+            connection,
+            artifact_type=artifact_type,
+            name=artifact_name,
+        )
+        for artifact_type, artifact_name in expected_artifacts
+    )
+
+
 def apply_all_migrations(connection: sqlite3.Connection) -> None:
     _ensure_migration_table(connection)
     for up_script, _down_script in _MIGRATION_STEPS:
         migration_version = up_script.removesuffix(".up.sql")
         if _is_migration_applied(connection, version=migration_version):
             continue
-        try:
-            apply_sql_script(connection, script_path=migration_script_path(up_script))
-        except sqlite3.OperationalError as exc:
-            if "already exists" not in str(exc).lower():
-                raise
+        if _expected_artifacts_exist(connection, version=migration_version):
+            _mark_migration_applied(connection, version=migration_version)
+            continue
+        apply_sql_script(connection, script_path=migration_script_path(up_script))
+        if not _expected_artifacts_exist(connection, version=migration_version):
+            raise sqlite3.OperationalError(
+                f"Migration '{migration_version}' did not create the expected schema artifacts."
+            )
         _mark_migration_applied(connection, version=migration_version)
 
 
