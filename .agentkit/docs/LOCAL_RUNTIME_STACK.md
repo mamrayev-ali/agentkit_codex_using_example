@@ -15,7 +15,11 @@ This runbook starts the local Decider walkthrough stack for T13:
 cp .env.runtime.example .env.runtime
 ```
 
-3. Optional if port `8000` is already occupied on host:
+3. Keep `DECIDER_LOCAL_API_PORT=8000` for the default frontend walkthrough.
+   The checked-in frontend development environment targets `http://localhost:8000/api/v1`.
+   If you override the API host port, update the frontend dev environment config before testing login.
+
+4. Optional if port `8000` is already occupied on host and you are also updating the frontend dev API base URL:
 
 ```bash
 export DECIDER_LOCAL_API_PORT=8001
@@ -47,6 +51,17 @@ curl -sS -X POST http://localhost:8080/realms/decider-local/protocol/openid-conn
   -d "client_id=decider-cli" \
   -d "username=demo-user" \
   -d "password=${DECIDER_KEYCLOAK_DEMO_USER_PASSWORD}"
+```
+
+PowerShell:
+
+```powershell
+curl.exe -X POST "http://localhost:8080/realms/decider-local/protocol/openid-connect/token" `
+  -H "Content-Type: application/x-www-form-urlencoded" `
+  -d "grant_type=password" `
+  -d "client_id=decider-cli" `
+  -d "username=demo-user" `
+  -d "password=<value-from-.env.runtime>"
 ```
 
 Use returned `access_token` against API:

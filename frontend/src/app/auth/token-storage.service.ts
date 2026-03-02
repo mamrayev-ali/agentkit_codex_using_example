@@ -33,14 +33,15 @@ export class TokenStorageService {
   }
 
   readPendingLogin(): PendingLoginRequest | null {
-    return parseStoredJson<PendingLoginRequest>(sessionStorage.getItem(_PENDING_LOGIN_KEY));
+    return parseStoredJson<PendingLoginRequest>(localStorage.getItem(_PENDING_LOGIN_KEY));
   }
 
   writePendingLogin(request: PendingLoginRequest): void {
-    sessionStorage.setItem(_PENDING_LOGIN_KEY, JSON.stringify(request));
+    // Use localStorage so the OIDC redirect round-trip does not lose pending PKCE state.
+    localStorage.setItem(_PENDING_LOGIN_KEY, JSON.stringify(request));
   }
 
   clearPendingLogin(): void {
-    sessionStorage.removeItem(_PENDING_LOGIN_KEY);
+    localStorage.removeItem(_PENDING_LOGIN_KEY);
   }
 }
