@@ -20,3 +20,7 @@ node_modules/
 # Common caches (recommended)
 __pycache__/
 .venv/
+
+# Local sqlite runtime artifacts
+services/api/*.db
+services/api/**/decider.db

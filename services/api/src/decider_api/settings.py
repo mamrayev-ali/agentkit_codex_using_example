@@ -1,6 +1,12 @@
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+
+
+def _default_database_url() -> str:
+    database_path = Path(__file__).resolve().parents[2] / "decider.db"
+    return f"sqlite:///{database_path.as_posix()}"
 
 
 def _parse_csv(value: str) -> tuple[str, ...]:
@@ -19,7 +25,7 @@ class AppSettings:
     app_name: str = "Decider API"
     public_api_prefix: str = "/api/v1"
     public_api_version: str = "1.0.0"
-    database_url: str = "sqlite:///./services/api/decider.db"
+    database_url: str = _default_database_url()
     keycloak_issuer: str = ""
     keycloak_audience: str = ""
     keycloak_jwks_json: str = ""
@@ -47,7 +53,7 @@ def get_settings() -> AppSettings:
         public_api_version=os.getenv("DECIDER_PUBLIC_API_VERSION", "1.0.0"),
         database_url=os.getenv(
             "DECIDER_DATABASE_URL",
-            "sqlite:///./services/api/decider.db",
+            _default_database_url(),
         ),
         keycloak_issuer=os.getenv("DECIDER_KEYCLOAK_ISSUER", ""),
         keycloak_audience=os.getenv("DECIDER_KEYCLOAK_AUDIENCE", ""),

@@ -61,3 +61,19 @@ class ExportResponse(BaseModel):
     export_id: str
     status: Literal["accepted"]
     audit_metadata: ExportAuditMetadata
+
+
+class AuditEventResponse(BaseModel):
+    event_id: str
+    action: Literal["entitlements.updated", "export.requested"]
+    actor_subject: str
+    target_subject: str | None = None
+    tenant_id: str
+    outcome: Literal["success", "forbidden"]
+    occurred_at: str
+    reason: str | None = None
+
+
+class TenantAuditEventsResponse(BaseModel):
+    tenant_id: str
+    events: list[AuditEventResponse] = Field(default_factory=list)

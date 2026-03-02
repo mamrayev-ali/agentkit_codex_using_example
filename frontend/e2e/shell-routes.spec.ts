@@ -4,7 +4,7 @@ test.describe('frontend auth routes', () => {
   test('redirects unauthenticated root route to login', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login\?redirectTo=%2Fdashboard$/);
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   });
 

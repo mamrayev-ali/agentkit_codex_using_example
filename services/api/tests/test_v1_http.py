@@ -229,3 +229,42 @@ def test_update_entitlements_rejects_unknown_modules() -> None:
 
     assert response.status_code == 422
     assert "Unsupported module" in response.json()["detail"]
+
+
+def test_admin_can_query_tenant_audit_events() -> None:
+    app.dependency_overrides[get_authenticated_auth_context] = _admin_auth_context
+    client = TestClient(app)
+    entitlement_response = client.put(
+        "/api/v1/tenants/acme/entitlements/user-123",
+        json={"enabled_modules": ["dashboard", "watchlist"]},
+    )
+    assert entitlement_response.status_code == 200
+
+    app.dependency_overrides[get_authenticated_auth_context] = _export_user_auth_context
+    export_response = client.post("/api/v1/tenants/acme/exports")
+    assert export_response.status_code == 200
+
+    app.dependency_overrides[get_authenticated_auth_context] = _admin_auth_context
+    audit_response = client.get("/api/v1/tenants/acme/audit/events")
+    app.dependency_overrides.clear()
+
+    assert audit_response.status_code == 200
+    body = audit_response.json()
+    assert body["tenant_id"] == "acme"
+    assert len(body["events"]) == 2
+    assert {item["action"] for item in body["events"]} == {
+        "entitlements.updated",
+        "export.requested",
+    }
+
+
+def test_non_admin_cannot_query_tenant_audit_events() -> None:
+    app.dependency_overrides[get_authenticated_auth_context] = _user_auth_context
+    try:
+        client = TestClient(app)
+        response = client.get("/api/v1/tenants/acme/audit/events")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Forbidden"}

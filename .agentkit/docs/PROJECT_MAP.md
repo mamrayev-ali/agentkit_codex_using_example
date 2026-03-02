@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context).
-  - Target product stack (planned next): persistent entitlement/audit storage and full user/admin walkthrough automation (ROADMAP T15-T20).
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint).
+  - Target product stack (planned next): full user/admin walkthrough automation (ROADMAP T16-T20).
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -40,9 +40,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - `POST /api/v1/tenants/{tenant_id}/exports`
       - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}`
       - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
+      - `GET /api/v1/tenants/{tenant_id}/audit/events`
     - Token validation (`RS256` + `iss/aud/exp`) and tenant guard checks are enforced server-side.
     - Export endpoint enforces `export:data` scope and records metadata-only audit events for success/forbidden attempts.
     - Entitlement updates return audit metadata payloads (`event_id`, actor/target, tenant, timestamp).
+    - T15 persists managed entitlements and audit trail in database via `application/audit.py` and storage repositories (`audit_repository.py`, `entitlement_repository.py`).
+    - Admin audit review endpoint is available at `GET /api/v1/tenants/{tenant_id}/audit/events` with tenant+admin gates.
     - T8 adds tenant-scoped dossier/search-request domain models and SQLite repository implementations.
     - T10 adds ingestion foundation modules:
       - URL validation policy (`domain/url_policy.py`) with SSRF guardrails
@@ -54,7 +57,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - Structured JSON logging formatter/filter (`infrastructure/observability/logging.py`)
       - In-memory Prometheus-text metrics registry (`infrastructure/observability/metrics.py`)
       - Exception reporting hook abstraction (`infrastructure/observability/exceptions.py`)
-    - Initial SQL migration set for dossier core exists at `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`.
+    - SQL migration sets exist for dossier core and entitlement/audit persistence:
+      - `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`
+      - `services/api/migrations/versions/0002_entitlements_audit_persistence.{up,down}.sql`
     - Checked-in OpenAPI source of truth exists at `services/api/openapi/openapi.v1.json`.
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
@@ -91,6 +96,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Auth token validation supports both static JWKS JSON and live JWKS URL retrieval modes.
   - Tenant export API is scope-gated (`export:data`) and emits metadata-only audit events (no export payload data).
   - Admin entitlement APIs are tenant-scoped and require admin-level authorization checks.
+  - Admin audit read API is tenant-scoped and admin-gated (`GET /api/v1/tenants/{tenant_id}/audit/events`).
+  - Managed entitlements and audit events are persisted in SQLite instead of in-memory process state.
   - Core dossier storage operations are tenant-scoped at repository query boundaries (`tenant_id` included in keys/lookups).
   - Ingestion remote-fetch foundation enforces SSRF-safe URL policy before outbound HTTP requests.
   - Frontend shell consumes backend entitlement shape for module visibility decisions.
@@ -137,27 +144,33 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T9 baseline):
+- Critical endpoints / operations (current T15 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
   - `GET /api/v1/auth/context` -> authenticated context with `tenant_id`, `roles`, `scopes`, `module_entitlements`
   - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-scoped access + entitlement gate (`dossiers` module)
   - `POST /api/v1/tenants/{tenant_id}/exports` -> tenant-scoped access + required `export:data` scope + metadata-only audit event
   - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement read
   - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement update + audit metadata
+  - `GET /api/v1/tenants/{tenant_id}/audit/events` -> admin-only tenant-scoped audit trail query
 
 ## 5) Data & migrations (if applicable)
 - Database(s):
   - Planned: PostgreSQL primary, MongoDB secondary.
 - Migration approach:
-  - Initial SQL migration set is tracked in `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`.
+  - SQL migration sets are tracked in:
+    - `services/api/migrations/versions/0001_initial_dossier_core.{up,down}.sql`
+    - `services/api/migrations/versions/0002_entitlements_audit_persistence.{up,down}.sql`
+  - Storage migration helper tracks applied versions via `schema_migrations`, auto-adopts fully-present legacy schemas, and fails closed on partially-applied migration state.
   - Alembic-based linear migration history remains a planned follow-up.
 - Rollback approach:
   - Mandatory migration plan + rollback for any schema change.
   - T8 rollback path is implemented via `0001_initial_dossier_core.down.sql`.
+  - T15 rollback path is implemented via `0002_entitlements_audit_persistence.down.sql`.
 - Critical tables/collections:
   - `dossiers` (tenant-scoped dossier registry)
   - `search_requests` (tenant-scoped search history linked to dossiers)
-  - planned next: tenants/users/permissions and export audit metadata persistence
+  - `managed_entitlements` (persistent tenant/subject module grants)
+  - `audit_events` (persistent metadata-only audit trail for entitlements and exports)
 
 ## 6) Frontend / UI surface (if applicable)
 - Routing approach:
@@ -204,7 +217,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - Additional CI gate commands:
   - `make verify-api-e2e` runs backend HTTP e2e marker suite (`pytest -m e2e_api`).
   - `make verify-ui-e2e` runs Playwright UI suite via pinned `@playwright/test@1.52.0` and supports `PLAYWRIGHT_SKIP_INSTALL=1` for CI flows that install browsers separately.
-- API e2e smoke definition:
+  - API e2e smoke definition:
   - In-process HTTP checks include:
     - `GET /health` legacy compatibility contract
     - `GET /api/v1/health` public v1 health contract
@@ -213,6 +226,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - export negative (`403` missing scope) and export positive (`200` with scope + tenant) paths
     - OpenAPI file validation for `services/api/openapi/openapi.v1.json` (schema shape + v1 path scope)
   - Runtime/OpenAPI sync is enforced by `services/api/tests/test_openapi_contract.py`.
+  - T15 persistence coverage includes:
+    - migration table creation/rollback assertions for entitlement/audit tables (`services/api/tests/test_migrations_integration.py`)
+    - repository-level persistence/queryability checks (`services/api/tests/test_entitlement_audit_persistence_integration.py`)
+    - admin audit read endpoint behavior (`services/api/tests/test_v1_http.py`)
   - Repository integration coverage includes tenant-scoped create/read behavior and migration up/down checks for dossier core storage.
   - T10 ingestion unit coverage includes:
     - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
@@ -710,12 +727,14 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - none (domain-only module).
   - tests:
     - Validated through storage integration tests.
-- `services/api/src/decider_api/infrastructure/storage/` - SQLite-backed repository implementations + migration helpers for dossier core.
+- `services/api/src/decider_api/infrastructure/storage/` - SQLite-backed repository implementations + migration helpers for dossier core and T15 entitlement/audit persistence.
   - public surface / key exports:
-    - `create_sqlite_connection()`, `SqliteDossierRepository`, `SqliteSearchRequestRepository`, `apply_initial_schema()`, `rollback_initial_schema()`.
+    - `create_sqlite_connection()`, `SqliteDossierRepository`, `SqliteSearchRequestRepository`, `SqliteManagedEntitlementRepository`, `SqliteAuditEventRepository`, `apply_initial_schema()`, `rollback_initial_schema()`, runtime schema helpers.
   - invariants / assumptions:
     - Foreign keys are enabled (`PRAGMA foreign_keys = ON`).
     - Tenant scoping is enforced in query predicates.
+    - Runtime schema ensure is idempotent via `schema_migrations`.
+    - Existing legacy schema is adopted only when the full expected artifact set is present for that migration version.
   - dependencies:
     - stdlib `sqlite3` and SQL migration scripts under `services/api/migrations/versions/`.
   - tests:
@@ -738,28 +757,56 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Executed by migration helper in storage layer.
   - tests:
     - Covered by `services/api/tests/test_migrations_integration.py`.
-- `services/api/src/decider_api/application/entitlements.py` - In-memory entitlement management and audit metadata builder.
+- `services/api/migrations/versions/0002_entitlements_audit_persistence.up.sql` - Forward SQL migration for persistent managed entitlements and audit trail.
+  - public surface / key exports:
+    - Creates `managed_entitlements` and `audit_events` tables with supporting indexes.
+  - invariants / assumptions:
+    - Stores metadata-only audit data and tenant-scoped managed module grants.
+  - dependencies:
+    - Executed by storage migration helper after `0001`.
+  - tests:
+    - Covered by `services/api/tests/test_migrations_integration.py`.
+- `services/api/migrations/versions/0002_entitlements_audit_persistence.down.sql` - Rollback SQL migration for persistent managed entitlements and audit trail.
+  - public surface / key exports:
+    - Drops indexes/tables created by T15 forward migration.
+  - invariants / assumptions:
+    - Safe to run after `0001` rollback sequence orchestration.
+  - dependencies:
+    - Executed by storage migration helper.
+  - tests:
+    - Covered by `services/api/tests/test_migrations_integration.py`.
+- `services/api/src/decider_api/application/entitlements.py` - Persistent entitlement management and audit metadata builder.
   - public surface / key exports:
     - Resolves effective module entitlements.
     - Updates tenant/user managed entitlements with audit metadata.
-    - Resets state for deterministic tests.
+    - Resets persisted entitlement state for deterministic tests.
   - invariants / assumptions:
     - Managed updates override claim-derived defaults.
+    - Managed entitlement writes and entitlement audit writes commit in one SQLite transaction.
     - Returns immutable list copies to callers.
   - dependencies:
-    - `decider_api.domain.permissions`.
+    - `decider_api.domain.permissions`, `decider_api.infrastructure.storage`, `decider_api.application.audit`.
   - tests:
     - Covered by `services/api/tests/test_permissions_unit.py` and HTTP route tests.
-- `services/api/src/decider_api/application/exports.py` - In-memory export workflow/audit metadata builder.
+- `services/api/src/decider_api/application/audit.py` - Persistent audit event service for entitlement/export workflows.
+  - public surface / key exports:
+    - `record_audit_event()`, `list_audit_events_for_tenant()`, `list_audit_events_by_action()`, `clear_audit_events_by_action()`.
+  - invariants / assumptions:
+    - Audit payload remains metadata-only; no exported dataset content is stored.
+  - dependencies:
+    - `decider_api.infrastructure.storage.{SqliteAuditEventRepository,run_with_storage_connection}`.
+  - tests:
+    - Covered by export/HTTP/integration tests.
+- `services/api/src/decider_api/application/exports.py` - Persistent export workflow/audit metadata builder.
   - public surface / key exports:
     - Creates export response payload with metadata-only audit block.
     - Records export audit events for successful and forbidden attempts.
-    - Lists/resets in-memory audit events for deterministic tests.
+    - Lists/resets persisted export audit events for deterministic tests.
   - invariants / assumptions:
     - Export response does not include exported dataset payload.
     - Audit events carry metadata only (`event_id`, actor, tenant, outcome, reason, timestamp).
   - dependencies:
-    - none (in-memory state + standard library only).
+    - `decider_api.application.audit`.
   - tests:
     - Covered by `services/api/tests/test_exports_application_unit.py` and HTTP route tests.
 - `services/api/src/decider_api/application/ingestion.py` - Ingestion job payload builder and processing orchestrator.
@@ -886,6 +933,17 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Export audit events remain deterministic after state reset.
   - dependencies:
     - `decider_api.application.exports`.
+  - tests:
+    - Executed in backend local/ci verification flows.
+- `services/api/tests/test_entitlement_audit_persistence_integration.py` - Integration tests for T15 persistence guarantees.
+  - public surface / key exports:
+    - Verifies managed entitlement persistence across DB reconnects.
+    - Verifies tenant-scoped audit queryability for admin review scenarios.
+  - invariants / assumptions:
+    - Persistence survives connection lifecycle changes.
+    - Tenant query filters are enforced in repository layer.
+  - dependencies:
+    - `decider_api.infrastructure.storage.{SqliteManagedEntitlementRepository,SqliteAuditEventRepository}`.
   - tests:
     - Executed in backend local/ci verification flows.
 - `services/api/tests/test_url_policy_unit.py` - Unit tests for SSRF-safe URL validation rules.
@@ -1043,6 +1101,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-02 [T15-fix] Closed remaining T15 gaps: made entitlement update + audit persistence transactional, hardened migration bootstrap so partial legacy schemas fail closed instead of being marked applied, restored the stable default SQLite path under `services/api/`, and aligned the Playwright auth-route expectation with the real `/login?redirectTo=...` redirect.
+  - 2026-02-27 [T15] Replaced in-memory entitlement/export-audit state with persistent SQLite storage: added T15 migration set (`0002_entitlements_audit_persistence.{up,down}.sql`), idempotent migration tracking (`schema_migrations`), new storage repositories/runtime helpers, new admin endpoint `GET /api/v1/tenants/{tenant_id}/audit/events`, updated OpenAPI v1 contract, and expanded test coverage for persistence/queryability.
 - 2026-02-27 [T14] Added frontend OIDC Authorization Code + PKCE integration for Keycloak: new login/callback pages, auth/session services (`auth.service`, `auth-context.service`, `token-storage`, `pkce`), route guards (`auth`, `anonymous`, `module`) for protected routes, shell/logout wiring to real backend auth-context entitlements, and expanded frontend unit/e2e auth-route tests.
 - 2026-02-26 [T13] Added local runtime walkthrough profile in `docker-compose.dev.yml` (`frontend`, `api`, `postgres`, `redis`, `keycloak`, `keycloak-bootstrap`), introduced runtime Dockerfiles/bootstrap artifacts (`docker/api.Dockerfile`, `docker/frontend.Dockerfile`, `docker/keycloak/*`), added Keycloak JWKS URL auth mode in API settings/dependencies, added configurable API host-port binding (`DECIDER_LOCAL_API_PORT`), and documented one-command runtime runbook in `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
 - 2026-02-26 [ui-kit-file-import] Moved user-provided UI kit stylesheet into frontend source tree as `frontend/src/styles/ui-kit.css` and wired global import in `frontend/src/styles.css` for upcoming UI implementation tickets.
@@ -1066,3 +1126,5 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - 2026-02-23 [T2] Added minimal backend scaffold under `services/api` with FastAPI app factory, `/health` endpoint contract, and unit + HTTP smoke tests; updated verification map for backend-present profile.
 - 2026-02-23 [T1] Replaced placeholder verify targets with a profile-aware verification contract (`Makefile`, `verify.sh`, `verify.ps1`, `verification_contract.py`) and documented Windows-first local evidence policy.
 - 2026-02-23 [project-intake-2026-02-23] Replaced template map with concrete repository memory and aligned it to the new roadmap baseline.
+  - Database runtime tuning:
+    - `DECIDER_DATABASE_URL` (default: absolute SQLite path resolved to `services/api/decider.db`)
