@@ -142,6 +142,498 @@
         }
       }
     },
+    "/api/v1/tenants/{tenant_id}/dossiers": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Dossiers V1",
+        "operationId": "get_tenant_dossiers_v1_api_v1_tenants__tenant_id__dossiers_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDossiersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Post Tenant Dossier V1",
+        "operationId": "post_tenant_dossier_v1_api_v1_tenants__tenant_id__dossiers_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DossierCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DossierResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/dossiers/{dossier_id}": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Dossier V1",
+        "operationId": "get_tenant_dossier_v1_api_v1_tenants__tenant_id__dossiers__dossier_id__get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "dossier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dossier Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DossierResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/search-requests": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Search Requests V1",
+        "operationId": "get_tenant_search_requests_v1_api_v1_tenants__tenant_id__search_requests_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSearchRequestsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Post Tenant Search Request V1",
+        "operationId": "post_tenant_search_request_v1_api_v1_tenants__tenant_id__search_requests_post",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequestCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRequestCreateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found."
+          },
+          "422": {
+            "description": "Validation error."
+          },
+          "503": {
+            "description": "Search ingestion unavailable."
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/search-requests/{request_id}": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Search Request V1",
+        "operationId": "get_tenant_search_request_v1_api_v1_tenants__tenant_id__search_requests__request_id__get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/search-requests/{request_id}/status": {
+      "get": {
+        "tags": [
+          "v1"
+        ],
+        "summary": "Get Tenant Search Request Status V1",
+        "operationId": "get_tenant_search_request_status_v1_api_v1_tenants__tenant_id__search_requests__request_id__status_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchRequestStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token."
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tenants/{tenant_id}/exports": {
       "post": {
         "tags": [
@@ -539,6 +1031,66 @@
         ],
         "title": "AuthContextResponse"
       },
+      "DossierCreateRequest": {
+        "properties": {
+          "subject_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Subject Name"
+          },
+          "subject_type": {
+            "type": "string",
+            "enum": [
+              "organization",
+              "person"
+            ],
+            "title": "Subject Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_name",
+          "subject_type"
+        ],
+        "title": "DossierCreateRequest"
+      },
+      "DossierResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "dossier_id": {
+            "type": "string",
+            "title": "Dossier Id"
+          },
+          "subject_name": {
+            "type": "string",
+            "title": "Subject Name"
+          },
+          "subject_type": {
+            "type": "string",
+            "enum": [
+              "organization",
+              "person"
+            ],
+            "title": "Subject Type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "dossier_id",
+          "subject_name",
+          "subject_type",
+          "created_at"
+        ],
+        "title": "DossierResponse"
+      },
       "EntitlementAuditMetadata": {
         "properties": {
           "event_id": {
@@ -735,6 +1287,162 @@
         ],
         "title": "HealthResponse"
       },
+      "SearchRequestCreateRequest": {
+        "properties": {
+          "dossier_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dossier Id"
+          },
+          "query_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query Text"
+          },
+          "source_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Key"
+          },
+          "remote_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Remote Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dossier_id",
+          "query_text",
+          "source_key",
+          "remote_url"
+        ],
+        "title": "SearchRequestCreateRequest"
+      },
+      "SearchRequestCreateResponse": {
+        "properties": {
+          "search_request": {
+            "$ref": "#/components/schemas/SearchRequestResponse"
+          },
+          "enqueue_metadata": {
+            "$ref": "#/components/schemas/SearchRequestEnqueueMetadataResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "search_request",
+          "enqueue_metadata"
+        ],
+        "title": "SearchRequestCreateResponse"
+      },
+      "SearchRequestEnqueueMetadataResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "queue_status": {
+            "type": "string",
+            "title": "Queue Status"
+          },
+          "result_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "completed",
+                  "failed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "queue_status"
+        ],
+        "title": "SearchRequestEnqueueMetadataResponse"
+      },
+      "SearchRequestResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "dossier_id": {
+            "type": "string",
+            "title": "Dossier Id"
+          },
+          "query_text": {
+            "type": "string",
+            "title": "Query Text"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "request_id",
+          "dossier_id",
+          "query_text",
+          "status",
+          "created_at"
+        ],
+        "title": "SearchRequestResponse"
+      },
+      "SearchRequestStatusResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "request_id",
+          "status"
+        ],
+        "title": "SearchRequestStatusResponse"
+      },
       "TenantAuditEventsResponse": {
         "properties": {
           "tenant_id": {
@@ -773,6 +1481,26 @@
         ],
         "title": "TenantBaseResource"
       },
+      "TenantDossiersResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "dossiers": {
+            "items": {
+              "$ref": "#/components/schemas/DossierResponse"
+            },
+            "type": "array",
+            "title": "Dossiers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id"
+        ],
+        "title": "TenantDossiersResponse"
+      },
       "TenantResourcesResponse": {
         "properties": {
           "tenant_id": {
@@ -792,6 +1520,26 @@
           "tenant_id"
         ],
         "title": "TenantResourcesResponse"
+      },
+      "TenantSearchRequestsResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "search_requests": {
+            "items": {
+              "$ref": "#/components/schemas/SearchRequestResponse"
+            },
+            "type": "array",
+            "title": "Search Requests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id"
+        ],
+        "title": "TenantSearchRequestsResponse"
       },
       "ValidationError": {
         "properties": {

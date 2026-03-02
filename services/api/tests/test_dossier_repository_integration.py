@@ -1,4 +1,4 @@
-from decider_api.application.dossiers import create_dossier, get_dossier
+from decider_api.application.dossiers import create_dossier, get_dossier, list_dossiers
 from decider_api.infrastructure.storage import (
     SqliteDossierRepository,
     apply_initial_schema,
@@ -86,3 +86,33 @@ def test_dossier_repository_allows_same_business_id_in_different_tenants() -> No
     assert tenant_a is not None
     assert tenant_b is not None
     assert tenant_a.subject_name != tenant_b.subject_name
+
+
+def test_dossier_repository_lists_only_requested_tenant_in_reverse_created_order() -> None:
+    repository = _build_repository()
+
+    first = create_dossier(
+        repository=repository,
+        tenant_id="tenant-a",
+        dossier_id="dos-001",
+        subject_name="First org",
+        subject_type="organization",
+    )
+    create_dossier(
+        repository=repository,
+        tenant_id="tenant-b",
+        dossier_id="dos-001",
+        subject_name="Other tenant org",
+        subject_type="organization",
+    )
+    second = create_dossier(
+        repository=repository,
+        tenant_id="tenant-a",
+        dossier_id="dos-002",
+        subject_name="Second org",
+        subject_type="organization",
+    )
+
+    listed = list_dossiers(repository=repository, tenant_id="tenant-a")
+
+    assert [item.dossier_id for item in listed] == [second.dossier_id, first.dossier_id]

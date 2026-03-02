@@ -4,6 +4,8 @@ from decider_api.application.dossiers import create_dossier
 from decider_api.application.search_requests import (
     create_search_request,
     get_search_request,
+    list_search_requests,
+    update_search_request_status,
 )
 from decider_api.infrastructure.storage import (
     SqliteDossierRepository,
@@ -85,3 +87,54 @@ def test_search_request_requires_existing_tenant_scoped_dossier() -> None:
             dossier_id="missing-dossier",
             query_text="query",
         )
+
+
+def test_search_request_repository_lists_only_requested_tenant_and_updates_status() -> None:
+    dossier_repository, search_repository = _build_repositories()
+    create_dossier(
+        repository=dossier_repository,
+        tenant_id="tenant-a",
+        dossier_id="dos-001",
+        subject_name="Acme LLP",
+        subject_type="organization",
+    )
+    create_dossier(
+        repository=dossier_repository,
+        tenant_id="tenant-b",
+        dossier_id="dos-001",
+        subject_name="Other LLP",
+        subject_type="organization",
+    )
+    create_search_request(
+        repository=search_repository,
+        tenant_id="tenant-a",
+        request_id="req-001",
+        dossier_id="dos-001",
+        query_text="first query",
+    )
+    second = create_search_request(
+        repository=search_repository,
+        tenant_id="tenant-a",
+        request_id="req-002",
+        dossier_id="dos-001",
+        query_text="second query",
+    )
+    create_search_request(
+        repository=search_repository,
+        tenant_id="tenant-b",
+        request_id="req-100",
+        dossier_id="dos-001",
+        query_text="other tenant query",
+    )
+
+    listed = list_search_requests(repository=search_repository, tenant_id="tenant-a")
+    updated = update_search_request_status(
+        repository=search_repository,
+        tenant_id="tenant-a",
+        request_id="req-002",
+        status="completed",
+    )
+
+    assert [item.request_id for item in listed] == [second.request_id, "req-001"]
+    assert updated is not None
+    assert updated.status == "completed"

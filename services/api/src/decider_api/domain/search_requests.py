@@ -31,6 +31,18 @@ class SearchRequestRepository(Protocol):
     def get_by_id(self, *, tenant_id: str, request_id: str) -> SearchRequest | None:
         ...
 
+    def list_for_tenant(self, *, tenant_id: str) -> list[SearchRequest]:
+        ...
+
+    def update_status(
+        self,
+        *,
+        tenant_id: str,
+        request_id: str,
+        status: str,
+    ) -> SearchRequest | None:
+        ...
+
 
 def _require_non_empty(value: str, *, field_name: str) -> str:
     normalized = value.strip()

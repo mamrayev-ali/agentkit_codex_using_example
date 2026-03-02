@@ -4,6 +4,7 @@ from sqlite3 import Connection, IntegrityError, Row
 from decider_api.domain.search_requests import (
     SearchRequest,
     SearchRequestDraft,
+    normalize_request_status,
     validate_search_request_draft,
 )
 
@@ -69,6 +70,46 @@ class SqliteSearchRequestRepository:
         if row is None:
             return None
         return _row_to_search_request(row)
+
+    def list_for_tenant(self, *, tenant_id: str) -> list[SearchRequest]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                tenant_id,
+                request_id,
+                dossier_id,
+                query_text,
+                status,
+                created_at
+            FROM search_requests
+            WHERE tenant_id = ?
+            ORDER BY created_at DESC, request_id DESC
+            """,
+            (tenant_id,),
+        ).fetchall()
+        return [_row_to_search_request(row) for row in rows]
+
+    def update_status(
+        self,
+        *,
+        tenant_id: str,
+        request_id: str,
+        status: str,
+    ) -> SearchRequest | None:
+        normalized_status = normalize_request_status(status)
+        cursor = self._connection.execute(
+            """
+            UPDATE search_requests
+            SET status = ?
+            WHERE tenant_id = ? AND request_id = ?
+            """,
+            (normalized_status, tenant_id, request_id),
+        )
+        self._connection.commit()
+
+        if cursor.rowcount == 0:
+            return None
+        return self.get_by_id(tenant_id=tenant_id, request_id=request_id)
 
 
 def _row_to_search_request(row: Row) -> SearchRequest:

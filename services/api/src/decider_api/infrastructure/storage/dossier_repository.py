@@ -63,6 +63,23 @@ class SqliteDossierRepository:
             return None
         return _row_to_dossier(row)
 
+    def list_for_tenant(self, *, tenant_id: str) -> list[Dossier]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                tenant_id,
+                dossier_id,
+                subject_name,
+                subject_type,
+                created_at
+            FROM dossiers
+            WHERE tenant_id = ?
+            ORDER BY created_at DESC, dossier_id DESC
+            """,
+            (tenant_id,),
+        ).fetchall()
+        return [_row_to_dossier(row) for row in rows]
+
 
 def _row_to_dossier(row: Row) -> Dossier:
     created_at_raw = row["created_at"]
