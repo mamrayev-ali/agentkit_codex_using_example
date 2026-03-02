@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX + T18 frontend admin workflow for tenant entitlements and audit review via a dedicated admin route, role/scope-based guard, and admin API client.
-  - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T18-T20.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX + T18 frontend admin workflow for tenant entitlements and audit review via a dedicated admin route, role/scope-based guard, and admin API client + T19 deterministic demo seed/runtime harness (`python -m decider_api.demo_seed`) with canonical walkthrough checklist.
+  - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T20.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -96,6 +96,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `.github/workflows/` - CI gates and release-ready enforcement.
   - Current tracked state:
     - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, security scans, and final release gate job.
+- `.agentkit/docs/DEMO_SCENARIOS.md` - Canonical T19 walkthrough checklist and seeded identifier reference for local user/admin demos.
 - `docker-compose.dev.yml` - Local container-first development runner.
   - Current tracked state:
     - Provides `dev` service to run verification commands inside Docker.
@@ -515,13 +516,23 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Validated when runtime profile starts successfully.
 - `.agentkit/docs/LOCAL_RUNTIME_STACK.md` - T13 runtime walkthrough runbook.
   - public surface / key exports:
-    - One-command startup/shutdown instructions and token smoke checks.
+    - One-command startup/shutdown instructions, deterministic T19 reset/reseed commands, and token smoke checks.
   - invariants / assumptions:
     - Requires `.env.runtime` with local-only credentials.
+    - Walkthrough state assumes the runtime stack has been reseeded with `python -m decider_api.demo_seed reseed`.
   - dependencies:
     - `docker-compose.dev.yml` runtime profile services.
   - tests:
     - Manual runbook verification in local environment.
+- `.agentkit/docs/DEMO_SCENARIOS.md` - Canonical T19 walkthrough checklist for deterministic demo evidence.
+  - public surface / key exports:
+    - Defines seeded dossier/request IDs, managed entitlement baseline, and expected user/admin walkthrough outcomes.
+  - invariants / assumptions:
+    - Uses synthetic names, IDs, and timestamps only.
+  - dependencies:
+    - `services/api/src/decider_api/demo_seed.py`, `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
+  - tests:
+    - Verified indirectly by `services/api/tests/test_demo_seed.py`.
 - `docker/dev.Dockerfile` - Dev image definition used by `docker-compose.dev.yml`.
   - public surface / key exports:
     - Extends `mcr.microsoft.com/devcontainers/universal:2` and installs `uv`.
@@ -871,6 +882,17 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.application.audit`.
   - tests:
     - Covered by `services/api/tests/test_exports_application_unit.py` and HTTP route tests.
+- `services/api/src/decider_api/demo_seed.py` - Deterministic T19 demo reset/reseed harness for local walkthroughs.
+  - public surface / key exports:
+    - `reset_demo_state()`, `reseed_demo_state()`, `build_demo_seed_manifest()`, CLI entrypoint `python -m decider_api.demo_seed`.
+  - invariants / assumptions:
+    - Resets seeded application tables before reseeding and resets SQLite audit sequence to keep event IDs stable.
+    - Seeded data stays synthetic and tenant-scoped; `umbrella` exists only as background isolation data.
+    - Managed entitlements intentionally override Keycloak-derived defaults for the walkthrough baseline.
+  - dependencies:
+    - `decider_api.infrastructure.storage`, `decider_api.infrastructure.ingestion.tasks`, `decider_api.domain.permissions`.
+  - tests:
+    - Covered by `services/api/tests/test_demo_seed.py`.
 - `services/api/src/decider_api/application/ingestion.py` - Ingestion job payload builder and processing orchestrator.
   - public surface / key exports:
     - `IngestionJobRequest`, `build_ingestion_job_payload()`, `process_ingestion_job()`.
@@ -1009,6 +1031,15 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.infrastructure.storage.{SqliteManagedEntitlementRepository,SqliteAuditEventRepository}`.
   - tests:
     - Executed in backend local/ci verification flows.
+- `services/api/tests/test_demo_seed.py` - Deterministic T19 demo-seed regression coverage.
+  - public surface / key exports:
+    - Verifies manifest shape, repeatable reseed behavior, and reset-before-reseed semantics.
+  - invariants / assumptions:
+    - Repeated reseed operations must recreate the same dossier/search/audit baseline, including stable audit event IDs.
+  - dependencies:
+    - `decider_api.demo_seed`, SQLite storage helpers.
+  - tests:
+    - Executed in backend local/ci verification flows.
 - `services/api/tests/test_url_policy_unit.py` - Unit tests for SSRF-safe URL validation rules.
   - public surface / key exports:
     - Verifies allowed schemes and blocked host/IP patterns.
@@ -1093,8 +1124,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `cp .env.runtime.example .env.runtime`
     - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime up -d --build`
     - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime ps`
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api uv run --frozen python -m decider_api.demo_seed reseed`
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api uv run --frozen python -m decider_api.demo_seed summary`
     - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime down -v`
     - full runbook: `.agentkit/docs/LOCAL_RUNTIME_STACK.md`
+    - walkthrough checklist: `.agentkit/docs/DEMO_SCENARIOS.md`
   - Frontend shell:
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
@@ -1146,6 +1180,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - If `keycloak-bootstrap` fails, verify `.env.runtime` values and realm import file:
     - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime logs keycloak keycloak-bootstrap --tail 200`
   - If API rejects local Keycloak tokens (`401`), verify issuer/audience/JWKS settings inside `api` service environment.
+  - If local walkthrough data drifts from the documented baseline, reseed and print the manifest again:
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api uv run --frozen python -m decider_api.demo_seed reseed`
+    - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api uv run --frozen python -m decider_api.demo_seed summary`
   - For host-only fallback mode (no compose file / inside container):
     - ensure `uv` is installed and available on PATH
     - run `uv run --directory services/api pytest -q`
@@ -1168,6 +1205,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-02 [T19] Added deterministic demo seed harness `python -m decider_api.demo_seed` for the local runtime stack, seeded synthetic tenant/dossier/search/audit baseline for walkthroughs, added repeatability tests, and documented canonical user/admin scenario steps in `.agentkit/docs/DEMO_SCENARIOS.md`.
   - 2026-03-02 [local-login-cors-fix] Added allow-listed backend CORS for `http://localhost:4200` via runtime settings so browser-based frontend auth-context requests succeed during the local Keycloak walkthrough, and added API coverage for CORS headers on unauthorized auth-context responses.
   - 2026-03-02 [local-login-callback-fix] Fixed frontend auth lifecycle so callback handling no longer deletes pending OIDC PKCE state during `AuthService` initialization or anonymous-guard auth checks; explicit logout/reset still clears both session and pending login state.
   - 2026-03-02 [local-login-fix] Fixed the local frontend OIDC development config to request only the `openid` scope exposed by the checked-in `decider-local` realm, added frontend assertions to prevent `invalid_scope` regressions, and updated the local runtime runbook/PROJECT_MAP to clarify that the default walkthrough expects the API on host port `8000` plus a PowerShell-friendly token example.

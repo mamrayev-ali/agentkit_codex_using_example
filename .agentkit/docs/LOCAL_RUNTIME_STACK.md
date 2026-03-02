@@ -42,7 +42,30 @@ Expected exposed endpoints:
 - api health: `http://localhost:<DECIDER_LOCAL_API_PORT>/api/v1/health` (default `8000`)
 - keycloak realm metadata: `http://localhost:8080/realms/decider-local/.well-known/openid-configuration`
 
-## 4) Get a real Keycloak token (demo user)
+## 4) Reset and reseed deterministic demo data
+
+Apply the canonical T19 walkthrough baseline inside the running API container:
+
+```bash
+docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api \
+  uv run --frozen python -m decider_api.demo_seed reseed
+```
+
+Optional commands:
+
+```bash
+docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api \
+  uv run --frozen python -m decider_api.demo_seed reset
+```
+
+```bash
+docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api \
+  uv run --frozen python -m decider_api.demo_seed summary
+```
+
+The walkthrough checklist and expected IDs live in `.agentkit/docs/DEMO_SCENARIOS.md`.
+
+## 5) Get a real Keycloak token (demo user)
 
 ```bash
 curl -sS -X POST http://localhost:8080/realms/decider-local/protocol/openid-connect/token \
@@ -71,13 +94,13 @@ curl -sS http://localhost:${DECIDER_LOCAL_API_PORT:-8000}/api/v1/auth/context \
   -H "Authorization: Bearer <access_token>"
 ```
 
-## 5) Stop (one command)
+## 6) Stop (one command)
 
 ```bash
 docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime down -v
 ```
 
-## 6) Troubleshooting
+## 7) Troubleshooting
 - If `keycloak-bootstrap` exits with user-not-found, inspect Keycloak logs and realm import path:
 
 ```bash
@@ -88,4 +111,13 @@ docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runti
 
 ```bash
 docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime logs api --tail 200
+```
+
+- If the walkthrough UI or API no longer matches the documented baseline, reseed and print the manifest again:
+
+```bash
+docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api \
+  uv run --frozen python -m decider_api.demo_seed reseed
+docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec api \
+  uv run --frozen python -m decider_api.demo_seed summary
 ```
