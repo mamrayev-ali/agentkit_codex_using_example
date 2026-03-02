@@ -84,6 +84,7 @@ describe('AuthService', () => {
     expect(parsedUrl.pathname.endsWith('/protocol/openid-connect/auth')).toBe(true);
     expect(parsedUrl.searchParams.get('client_id')).toBe('decider-frontend');
     expect(parsedUrl.searchParams.get('response_type')).toBe('code');
+    expect(parsedUrl.searchParams.get('scope')).toBe('openid');
     expect(parsedUrl.searchParams.get('code_challenge_method')).toBe('S256');
     expect(storage.pendingLogin?.redirectTo).toBe('/watchlist');
     expect(storage.pendingLogin?.state).toBe(parsedUrl.searchParams.get('state'));
@@ -168,5 +169,24 @@ describe('AuthService', () => {
 
     const loginUrl = await service.beginLogin('/dashboard');
     expect(loginUrl).toContain('/protocol/openid-connect/auth');
+  });
+
+  it('preserves pending login state during service initialization without a session', () => {
+    const storage = new MemoryTokenStorage();
+    storage.pendingLogin = {
+      state: 'callback-state',
+      codeVerifier: 'code-verifier',
+      redirectTo: '/dashboard',
+      createdAt: Date.now(),
+    };
+
+    createAuthServiceForTest({ storage });
+
+    expect(storage.pendingLogin).toEqual({
+      state: 'callback-state',
+      codeVerifier: 'code-verifier',
+      redirectTo: '/dashboard',
+      createdAt: storage.pendingLogin?.createdAt,
+    });
   });
 });

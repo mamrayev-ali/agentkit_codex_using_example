@@ -2,6 +2,7 @@ import logging
 from time import perf_counter
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
 from decider_api.api.routes.health import router as health_router
@@ -37,6 +38,14 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.public_api_version,
     )
+    if settings.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_allow_origins),
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
     metrics_registry = InMemoryMetricsRegistry()
     exception_reporter = build_exception_reporter(
         enabled=settings.observability_enable_exception_reporting

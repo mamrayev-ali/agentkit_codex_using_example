@@ -7,6 +7,7 @@ export const environment = {
     clientId: 'decider-frontend',
     redirectPath: '/auth/callback',
     postLogoutRedirectPath: '/login',
-    scopes: 'openid profile email',
+    // The checked-in local Keycloak realm exposes only `openid` plus app scopes.
+    scopes: 'openid',
   },
 } as const;

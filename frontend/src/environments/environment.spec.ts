@@ -11,5 +11,6 @@ describe('environment', () => {
     expect(environment.oidc.clientId).toBe('decider-frontend');
     expect(environment.oidc.issuerUrl).toContain('/realms/decider-local');
     expect(environment.oidc.redirectPath).toBe('/auth/callback');
+    expect(environment.oidc.scopes).toBe('openid');
   });
 });

@@ -32,6 +32,7 @@ class AppSettings:
     keycloak_jwks_url: str = ""
     keycloak_jwks_timeout_seconds: float = 5.0
     keycloak_tenant_claim_names: tuple[str, ...] = ("tenant_id", "tenant", "org_id")
+    cors_allow_origins: tuple[str, ...] = ("http://localhost:4200",)
     ingestion_task_always_eager: bool = True
     ingestion_task_broker_url: str = "memory://"
     ingestion_task_backend_url: str = "cache+memory://"
@@ -67,6 +68,9 @@ def get_settings() -> AppSettings:
                 "DECIDER_KEYCLOAK_TENANT_CLAIMS",
                 "tenant_id,tenant,org_id",
             )
+        ),
+        cors_allow_origins=_parse_csv(
+            os.getenv("DECIDER_CORS_ALLOW_ORIGINS", "http://localhost:4200")
         ),
         ingestion_task_always_eager=_parse_bool(
             os.getenv("DECIDER_INGESTION_TASK_ALWAYS_EAGER", "true")

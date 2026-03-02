@@ -1084,6 +1084,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Frontend shell:
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
+    - local OIDC walkthrough expects the frontend dev environment to call `http://localhost:8000/api/v1`; if `DECIDER_LOCAL_API_PORT` is overridden, update the frontend dev environment accordingly before testing login
   - CI-oriented gates:
     - `make verify-api-e2e`
     - `make verify-ui-e2e PLAYWRIGHT_SKIP_INSTALL=1`
@@ -1153,6 +1154,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-02 [local-login-cors-fix] Added allow-listed backend CORS for `http://localhost:4200` via runtime settings so browser-based frontend auth-context requests succeed during the local Keycloak walkthrough, and added API coverage for CORS headers on unauthorized auth-context responses.
+  - 2026-03-02 [local-login-callback-fix] Fixed frontend auth lifecycle so callback handling no longer deletes pending OIDC PKCE state during `AuthService` initialization or anonymous-guard auth checks; explicit logout/reset still clears both session and pending login state.
+  - 2026-03-02 [local-login-fix] Fixed the local frontend OIDC development config to request only the `openid` scope exposed by the checked-in `decider-local` realm, added frontend assertions to prevent `invalid_scope` regressions, and updated the local runtime runbook/PROJECT_MAP to clarify that the default walkthrough expects the API on host port `8000` plus a PowerShell-friendly token example.
+  - 2026-03-02 [local-login-storage-fix] Fixed the local OIDC callback state persistence by moving frontend pending-login storage to `localStorage` while keeping authenticated session tokens in `sessionStorage`, and added unit coverage for the split storage behavior.
   - 2026-03-02 [T17-playwright-dev] Fixed local Playwright runtime for container-first verification: `docker/dev.Dockerfile` now preinstalls Chromium in the `dev` image, `docker-compose.dev.yml` exports `PLAYWRIGHT_SKIP_INSTALL=1`, and `make verify-ui-e2e` now passes inside the dev container. Also tightened the T17 Playwright locator for shell navigation to avoid strict-mode ambiguity.
   - 2026-03-02 [T17] Replaced frontend workflow placeholders with working user-facing dashboard, dossier, search, and export views: added a tenant-aware frontend workflow API client, new protected `/searches` and `/exports` routes under the existing `dossiers` entitlement, refreshed shell navigation, and expanded unit/Playwright coverage for dossier-enabled user flows and export-forbidden feedback.
   - 2026-03-02 [T16] Added public dossier/search workflow APIs on top of the existing T8 storage model: new tenant-scoped v1 dossier list/create/detail routes, new search-request list/create/detail/status routes, ingestion enqueue wiring for search creation, deterministic repository list ordering/status updates, updated OpenAPI v1 contract, and expanded repository/HTTP coverage.

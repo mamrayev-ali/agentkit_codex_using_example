@@ -106,6 +106,19 @@ def test_v1_tenant_resources_endpoint_rejects_missing_token() -> None:
     assert response.json() == {"detail": "Invalid or expired token."}
 
 
+def test_auth_context_unauthorized_response_includes_local_cors_headers() -> None:
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/v1/auth/context",
+        headers={"Origin": "http://localhost:4200"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["access-control-allow-origin"] == "http://localhost:4200"
+    assert response.json() == {"detail": "Invalid or expired token."}
+
+
 def test_v1_tenant_resources_endpoint_blocks_cross_tenant_access() -> None:
     validator = _build_validator()
     app.dependency_overrides[get_token_validator] = lambda: validator

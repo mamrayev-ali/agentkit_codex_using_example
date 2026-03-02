@@ -160,7 +160,7 @@ export class AuthService {
 
   async ensureAuthenticated(): Promise<boolean> {
     if (this.readValidSession() === null) {
-      this.clearSession();
+      this.clearRuntimeSession();
       return false;
     }
 
@@ -175,7 +175,7 @@ export class AuthService {
   async refreshAuthContext(): Promise<AuthContext | null> {
     const session = this.readValidSession();
     if (session === null) {
-      this.clearSession();
+      this.clearRuntimeSession();
       return null;
     }
 
@@ -185,7 +185,7 @@ export class AuthService {
       return authContext;
     } catch (error) {
       if (error instanceof AuthContextRequestError && error.status === 401) {
-        this.clearSession();
+        this.clearRuntimeSession();
         return null;
       }
 
@@ -211,15 +211,19 @@ export class AuthService {
   }
 
   clearSession(): void {
+    this.clearRuntimeSession();
+    this.storage.clearPendingLogin();
+  }
+
+  private clearRuntimeSession(): void {
     this._session.set(null);
     this._authContext.set(null);
     this.storage.clearSession();
-    this.storage.clearPendingLogin();
   }
 
   private async initialize(): Promise<void> {
     if (this.readValidSession() === null) {
-      this.clearSession();
+      this.clearRuntimeSession();
       return;
     }
 
