@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), and T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint).
-  - Target product stack (planned next): full user/admin walkthrough automation (ROADMAP T16-T20).
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint).
+  - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T17-T20.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -37,6 +37,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - `GET /api/v1/health`
       - `GET /api/v1/auth/context`
       - `GET /api/v1/tenants/{tenant_id}/resources`
+      - `GET /api/v1/tenants/{tenant_id}/dossiers`
+      - `POST /api/v1/tenants/{tenant_id}/dossiers`
+      - `GET /api/v1/tenants/{tenant_id}/dossiers/{dossier_id}`
+      - `GET /api/v1/tenants/{tenant_id}/search-requests`
+      - `POST /api/v1/tenants/{tenant_id}/search-requests`
+      - `GET /api/v1/tenants/{tenant_id}/search-requests/{request_id}`
+      - `GET /api/v1/tenants/{tenant_id}/search-requests/{request_id}/status`
       - `POST /api/v1/tenants/{tenant_id}/exports`
       - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}`
       - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}`
@@ -47,6 +54,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - T15 persists managed entitlements and audit trail in database via `application/audit.py` and storage repositories (`audit_repository.py`, `entitlement_repository.py`).
     - Admin audit review endpoint is available at `GET /api/v1/tenants/{tenant_id}/audit/events` with tenant+admin gates.
     - T8 adds tenant-scoped dossier/search-request domain models and SQLite repository implementations.
+    - T16 exposes dossier/search public workflow routes on top of the T8 storage model:
+      - dossier list/create/detail are tenant-scoped and require the `dossiers` module entitlement
+      - search-request list/create/detail/status are tenant-scoped and require the `dossiers` module entitlement
+      - search creation triggers the ingestion queue path and persists a derived status (`queued` or `completed`) without returning fetched remote payload data
     - T10 adds ingestion foundation modules:
       - URL validation policy (`domain/url_policy.py`) with SSRF guardrails
       - Source adapter protocol (`domain/source_adapter.py`)
@@ -99,6 +110,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Admin audit read API is tenant-scoped and admin-gated (`GET /api/v1/tenants/{tenant_id}/audit/events`).
   - Managed entitlements and audit events are persisted in SQLite instead of in-memory process state.
   - Core dossier storage operations are tenant-scoped at repository query boundaries (`tenant_id` included in keys/lookups).
+  - Dossier/search workflow APIs are tenant-scoped, gated by `dossiers` module access, and keep backend authorization authoritative.
+  - Search-request creation triggers ingestion enqueueing and persists only safe queue/status metadata in workflow records and API responses.
   - Ingestion remote-fetch foundation enforces SSRF-safe URL policy before outbound HTTP requests.
   - Frontend shell consumes backend entitlement shape for module visibility decisions.
   - Frontend route access is guarded by authenticated session state and required module entitlement checks; backend remains authorization source of truth.
@@ -144,10 +157,17 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - `v1` accepts additive changes only (new optional fields/endpoints).
   - Breaking changes require a new versioned prefix (for example `/api/v2`) and an explicit migration note.
   - Checked-in OpenAPI contract and runtime schema must remain identical in tests.
-- Critical endpoints / operations (current T15 baseline):
+- Critical endpoints / operations (current T16 baseline):
   - `GET /api/v1/health` -> exact contract `{ "status": "ok" }`
   - `GET /api/v1/auth/context` -> authenticated context with `tenant_id`, `roles`, `scopes`, `module_entitlements`
   - `GET /api/v1/tenants/{tenant_id}/resources` -> tenant-scoped access + entitlement gate (`dossiers` module)
+  - `GET /api/v1/tenants/{tenant_id}/dossiers` -> tenant-scoped dossier listing, gated by `dossiers` module entitlement
+  - `POST /api/v1/tenants/{tenant_id}/dossiers` -> tenant-scoped dossier creation with validated `subject_name` / `subject_type`
+  - `GET /api/v1/tenants/{tenant_id}/dossiers/{dossier_id}` -> tenant-scoped dossier detail lookup
+  - `GET /api/v1/tenants/{tenant_id}/search-requests` -> tenant-scoped search-request listing
+  - `POST /api/v1/tenants/{tenant_id}/search-requests` -> tenant-scoped search creation + ingestion enqueue metadata + persisted status
+  - `GET /api/v1/tenants/{tenant_id}/search-requests/{request_id}` -> tenant-scoped search-request detail lookup
+  - `GET /api/v1/tenants/{tenant_id}/search-requests/{request_id}/status` -> tenant-scoped current persisted search status
   - `POST /api/v1/tenants/{tenant_id}/exports` -> tenant-scoped access + required `export:data` scope + metadata-only audit event
   - `GET /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement read
   - `PUT /api/v1/tenants/{tenant_id}/entitlements/{subject}` -> admin-only entitlement update + audit metadata
@@ -230,7 +250,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - migration table creation/rollback assertions for entitlement/audit tables (`services/api/tests/test_migrations_integration.py`)
     - repository-level persistence/queryability checks (`services/api/tests/test_entitlement_audit_persistence_integration.py`)
     - admin audit read endpoint behavior (`services/api/tests/test_v1_http.py`)
-  - Repository integration coverage includes tenant-scoped create/read behavior and migration up/down checks for dossier core storage.
+  - T16 workflow coverage includes:
+    - dossier list/create/detail HTTP workflow and negative authz/resource cases (`services/api/tests/test_v1_http.py`)
+    - search-request list/create/detail/status HTTP workflow and negative tenant/resource/validation cases (`services/api/tests/test_v1_http.py`)
+    - OpenAPI required path assertions for new dossier/search routes (`services/api/tests/test_openapi_contract.py`)
+  - Repository integration coverage includes tenant-scoped create/read/list behavior, deterministic ordering, search-status updates, and migration up/down checks for dossier core storage.
   - T10 ingestion unit coverage includes:
     - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
     - HTTP retry/timeout behavior (`services/api/tests/test_http_client_unit.py`)
@@ -653,9 +677,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Covered by `services/api/tests/test_v1_http.py`.
 - `services/api/src/decider_api/api/schemas/v1.py` - Pydantic request/response schemas for v1 public API.
   - public surface / key exports:
-    - `HealthResponse`, `AuthContextResponse`, `TenantResourcesResponse`, `ExportResponse`, `EntitlementsUpdateRequest`, `EntitlementsResponse`.
+    - `HealthResponse`, `AuthContextResponse`, dossier/search workflow request+response models, `TenantResourcesResponse`, `ExportResponse`, `EntitlementsUpdateRequest`, `EntitlementsResponse`.
   - invariants / assumptions:
     - Defines stable response shape used by OpenAPI contract.
+    - Search workflow response models expose queue/status metadata only, not fetched remote payload content.
   - dependencies:
     - Pydantic and FastAPI response modeling.
   - tests:
@@ -691,22 +716,25 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Executed in smoke/local/ci backend verification flows.
 - `services/api/src/decider_api/application/dossiers.py` - Application service helpers for dossier create/read use-cases.
   - public surface / key exports:
-    - `create_dossier()`, `get_dossier()`.
+    - `create_dossier()`, `get_dossier()`, `list_dossiers()`.
   - invariants / assumptions:
     - Always delegates persistence through `DossierRepository` abstraction.
+    - Dossier writes/reads/listing stay tenant-scoped.
   - dependencies:
     - `decider_api.domain.dossiers`.
   - tests:
     - Covered by `services/api/tests/test_dossier_repository_integration.py`.
 - `services/api/src/decider_api/application/search_requests.py` - Application service helpers for search request create/read use-cases.
   - public surface / key exports:
-    - `create_search_request()`, `get_search_request()`.
+    - `create_search_request()`, `get_search_request()`, `list_search_requests()`, `update_search_request_status()`, `create_search_request_with_ingestion()`, `SearchRequestEnqueueMetadata`.
   - invariants / assumptions:
     - Search request write path remains tenant-scoped and dossier-linked.
+    - Search creation validates dossier existence before enqueueing ingestion.
+    - Persisted status is derived from safe enqueue/result metadata (`queued`, `completed`, `failed`) rather than remote payload bodies.
   - dependencies:
-    - `decider_api.domain.search_requests`.
+    - `decider_api.domain.search_requests`, `decider_api.domain.dossiers`, `decider_api.infrastructure.ingestion.tasks`.
   - tests:
-    - Covered by `services/api/tests/test_search_request_repository_integration.py`.
+    - Covered by `services/api/tests/test_search_request_repository_integration.py` and `services/api/tests/test_v1_http.py`.
 - `services/api/src/decider_api/domain/dossiers.py` - Core dossier entities, validation, and repository protocol.
   - public surface / key exports:
     - `Dossier`, `DossierDraft`, `DossierRepository`, `validate_dossier_draft()`.
@@ -909,9 +937,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Executed in backend local/ci verification flows.
 - `services/api/tests/test_v1_http.py` - HTTP route authorization tests.
   - public surface / key exports:
-    - Verifies tenant guard, token auth failures, export scope/tenant gates with audit side effects, admin entitlement mutation paths, and 403 negative cases.
+    - Verifies tenant guard, token auth failures, dossier/search workflow routes, export scope/tenant gates with audit side effects, admin entitlement mutation paths, and 403/404/422 negative cases.
   - invariants / assumptions:
     - Server-side permission checks remain authoritative.
+    - Search creation path can stub ingestion enqueueing while preserving tenant-scoped workflow semantics.
   - dependencies:
     - `decider_api.api.routes.v1`, auth dependencies, entitlement application state.
   - tests:
@@ -1091,6 +1120,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Validate T8 storage migration/tests:
     - `uv run --directory services/api pytest -q services/api/tests/test_migrations_integration.py`
     - `uv run --directory services/api pytest -q services/api/tests/test_dossier_repository_integration.py services/api/tests/test_search_request_repository_integration.py`
+  - Validate T16 dossier/search workflow API:
+    - `uv run --directory services/api pytest -q services/api/tests/test_v1_http.py services/api/tests/test_openapi_contract.py`
   - Validate T10 ingestion modules/tests:
     - `uv run --directory services/api pytest -q services/api/tests/test_url_policy_unit.py services/api/tests/test_http_client_unit.py services/api/tests/test_ingestion_pipeline_unit.py`
   - Validate T11 observability modules/tests:
@@ -1101,6 +1132,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-02 [T16] Added public dossier/search workflow APIs on top of the existing T8 storage model: new tenant-scoped v1 dossier list/create/detail routes, new search-request list/create/detail/status routes, ingestion enqueue wiring for search creation, deterministic repository list ordering/status updates, updated OpenAPI v1 contract, and expanded repository/HTTP coverage.
   - 2026-03-02 [T15-fix] Closed remaining T15 gaps: made entitlement update + audit persistence transactional, hardened migration bootstrap so partial legacy schemas fail closed instead of being marked applied, restored the stable default SQLite path under `services/api/`, and aligned the Playwright auth-route expectation with the real `/login?redirectTo=...` redirect.
   - 2026-02-27 [T15] Replaced in-memory entitlement/export-audit state with persistent SQLite storage: added T15 migration set (`0002_entitlements_audit_persistence.{up,down}.sql`), idempotent migration tracking (`schema_migrations`), new storage repositories/runtime helpers, new admin endpoint `GET /api/v1/tenants/{tenant_id}/audit/events`, updated OpenAPI v1 contract, and expanded test coverage for persistence/queryability.
 - 2026-02-27 [T14] Added frontend OIDC Authorization Code + PKCE integration for Keycloak: new login/callback pages, auth/session services (`auth.service`, `auth-context.service`, `token-storage`, `pkce`), route guards (`auth`, `anonymous`, `module`) for protected routes, shell/logout wiring to real backend auth-context entitlements, and expanded frontend unit/e2e auth-route tests.

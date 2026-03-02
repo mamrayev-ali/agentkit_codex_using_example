@@ -29,6 +29,9 @@ class DossierRepository(Protocol):
     def get_by_id(self, *, tenant_id: str, dossier_id: str) -> Dossier | None:
         ...
 
+    def list_for_tenant(self, *, tenant_id: str) -> list[Dossier]:
+        ...
+
 
 def _require_non_empty(value: str, *, field_name: str) -> str:
     normalized = value.strip()
