@@ -59,9 +59,27 @@ export class AuthService {
     return session !== null && this._authContext() !== null;
   }
 
+  accessToken(): string | null {
+    return this.readValidSession()?.accessToken ?? null;
+  }
+
+  tenantId(): string | null {
+    return this._authContext()?.tenantId ?? null;
+  }
+
   hasModule(moduleKey: string): boolean {
     const normalizedModule = moduleKey.trim().toLowerCase();
     return this.moduleEntitlements().includes(normalizedModule);
+  }
+
+  hasScope(scopeKey: string): boolean {
+    const normalizedScope = scopeKey.trim().toLowerCase();
+    const authContext = this._authContext();
+    if (authContext === null || !normalizedScope) {
+      return false;
+    }
+
+    return authContext.scopes.includes(normalizedScope);
   }
 
   async beginLogin(redirectTo: string): Promise<string> {

@@ -129,6 +129,9 @@ describe('AuthService', () => {
 
     expect(service.isAuthenticated()).toBe(true);
     expect(service.hasModule('dashboard')).toBe(true);
+    expect(service.accessToken()).toBe('token-value');
+    expect(service.tenantId()).toBe('acme');
+    expect(service.hasScope('read:data')).toBe(true);
   });
 
   it('rejects callback when state does not match pending login', async () => {
@@ -161,6 +164,7 @@ describe('AuthService', () => {
 
     const isAuthenticated = await service.ensureAuthenticated();
     expect(isAuthenticated).toBe(false);
+    expect(service.accessToken()).toBeNull();
 
     const loginUrl = await service.beginLogin('/dashboard');
     expect(loginUrl).toContain('/protocol/openid-connect/auth');
