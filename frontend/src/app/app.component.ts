@@ -30,6 +30,10 @@ export class AppComponent {
     return this.authService.hasModule(moduleKey);
   }
 
+  isAdminVisible(): boolean {
+    return this.authService.isAdminActor();
+  }
+
   logout(): void {
     const logoutUrl = this.authService.createLogoutUrl();
     this.authService.clearSession();

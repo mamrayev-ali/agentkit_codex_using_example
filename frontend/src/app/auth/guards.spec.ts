@@ -3,6 +3,7 @@ import '@angular/compiler';
 import { createEnvironmentInjector, runInInjectionContext, type Provider } from '@angular/core';
 import { Router, type RouterStateSnapshot } from '@angular/router';
 
+import { adminGuard } from './admin.guard';
 import { anonymousGuard } from './anonymous.guard';
 import { AuthService } from './auth.service';
 import { authGuard } from './auth.guard';
@@ -12,6 +13,7 @@ describe('auth guards', () => {
   const authServiceMock = {
     ensureAuthenticated: vi.fn<() => Promise<boolean>>(),
     hasModule: vi.fn<(moduleKey: string) => boolean>(),
+    isAdminActor: vi.fn<() => boolean>(),
   };
   const routerMock = {
     createUrlTree: vi.fn(
@@ -25,6 +27,7 @@ describe('auth guards', () => {
   beforeEach(() => {
     authServiceMock.ensureAuthenticated.mockReset();
     authServiceMock.hasModule.mockReset();
+    authServiceMock.isAdminActor.mockReset();
     routerMock.createUrlTree.mockReset();
   });
 
@@ -76,6 +79,28 @@ describe('auth guards', () => {
     const result = await runWithProviders(() =>
       moduleGuard({ data: { requiredModule: 'watchlist' } } as never, {} as never),
     );
+
+    expect(routerMock.createUrlTree).toHaveBeenCalledWith(['/dashboard']);
+    expect(result).toEqual({
+      commands: ['/dashboard'],
+      extras: undefined,
+    });
+  });
+
+  it('allows admin route for admin actor', async () => {
+    authServiceMock.ensureAuthenticated.mockResolvedValue(true);
+    authServiceMock.isAdminActor.mockReturnValue(true);
+
+    const result = await runWithProviders(() => adminGuard({} as never, {} as never));
+
+    expect(result).toBe(true);
+  });
+
+  it('redirects non-admin actor away from admin route', async () => {
+    authServiceMock.ensureAuthenticated.mockResolvedValue(true);
+    authServiceMock.isAdminActor.mockReturnValue(false);
+
+    const result = await runWithProviders(() => adminGuard({} as never, {} as never));
 
     expect(routerMock.createUrlTree).toHaveBeenCalledWith(['/dashboard']);
     expect(result).toEqual({

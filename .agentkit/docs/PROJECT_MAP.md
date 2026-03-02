@@ -11,7 +11,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX + T18 frontend admin workflow for tenant entitlements and audit review via a dedicated admin route, role/scope-based guard, and admin API client.
   - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T18-T20.
 - Where to start reading the code:
   - `AGENTS.md`
@@ -75,19 +75,24 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
   - Current tracked state:
-    - Standalone Angular app with auth-aware routes: `/login`, `/auth/callback`, protected `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/watchlist`, and guarded fallback `/**`.
+    - Standalone Angular app with auth-aware routes: `/login`, `/auth/callback`, protected `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/admin`, `/watchlist`, and guarded fallback `/**`.
     - OIDC Authorization Code + PKCE flow is implemented in frontend auth services (`auth.service`, `auth-context.service`, `token-storage.service`, `pkce`) with Keycloak endpoints from environment config.
     - Session lifecycle is enforced in client guards (`auth`, `anonymous`, `module`) with 401/session-expiry fallback to re-login.
-    - App shell navigation visibility is driven by normalized backend `module_entitlements` from `/api/v1/auth/context`.
+    - App shell navigation visibility is driven by normalized backend `module_entitlements` from `/api/v1/auth/context`, plus admin-only navigation derived from normalized auth roles/scopes.
     - Tenant dossier/search/export UI state is fetched through `frontend/src/app/features/workflows/workflow-api.service.ts`, which derives tenant path and bearer token from the existing frontend auth state instead of duplicating auth storage.
+    - Tenant admin UI state is fetched through `frontend/src/app/features/admin/admin-api.service.ts`, which talks to existing tenant-scoped entitlement/audit endpoints and reuses the same auth-derived tenant/token boundary.
     - Working user pages now exist for:
       - dashboard summary and recent activity
       - dossier create/list/select workflow
       - search-request create/list workflow
       - export request workflow with explicit 403 feedback
+    - Working admin page now exists for:
+      - subject entitlement read/update workflow
+      - tenant audit event review
+      - current-session auth-context refresh after self-entitlement changes
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
-    - Playwright config and smoke e2e auth-route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`, now including dossier-enabled shell navigation and export-forbidden UX coverage.
+    - Playwright config and smoke e2e auth-route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`, now including dossier-enabled shell navigation, export-forbidden UX coverage, and admin-route coverage for entitlement update/audit review.
 - `.github/workflows/` - CI gates and release-ready enforcement.
   - Current tracked state:
     - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, security scans, and final release gate job.
@@ -202,22 +207,25 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ## 6) Frontend / UI surface (if applicable)
 - Routing approach:
   - Public auth routes: `/login`, `/auth/callback`.
-  - Protected shell routes: `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/watchlist`, fallback `/**`.
+  - Protected shell routes: `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/admin`, `/watchlist`, fallback `/**`.
   - Route guards:
     - `authGuard` redirects unauthenticated access to `/login` with `redirectTo`.
     - `anonymousGuard` redirects authenticated users away from login/callback to `/dashboard`.
     - `moduleGuard` enforces per-route `requiredModule` and redirects forbidden access to `/dashboard`.
+    - `adminGuard` enforces admin-only route access from normalized auth roles/scopes and redirects non-admin actors to `/dashboard`.
   - User workflow route rules:
     - `/dashboard` remains `requiredModule: 'dashboard'`.
     - `/dossiers`, `/searches`, and `/exports` all rely on `requiredModule: 'dossiers'`; export scope is still enforced only by backend.
+    - `/admin` does not use a module entitlement; it is exposed only to actors with admin role/scope while backend admin endpoints remain authoritative.
   - Uses standalone components + lazy `loadComponent`.
 - State management approach:
   - Auth/session state is held in Angular signals inside `AuthService`.
   - Session token payload is stored in `sessionStorage` (`decider.auth.session.v1`) with pending PKCE login state key (`decider.auth.pending-login.v1`).
   - Shell keeps lightweight module visibility state derived from backend auth-context payload (`module_entitlements`).
   - `AuthContextService` normalizes backend payload (`tenant_id`, `roles`, `scopes`, `module_entitlements`) into frontend-safe shape.
-  - `AuthService` now also exposes read-only helpers for current access token, tenant, and scopes so feature services can call backend APIs without reimplementing auth-context parsing.
+  - `AuthService` now also exposes read-only helpers for current access token, tenant, subject, scopes, and admin-actor detection so feature services/guards can call backend APIs without reimplementing auth-context parsing.
   - Workflow page state uses Angular signals local to each standalone page; backend data fetching is centralized in `WorkflowApiService`.
+  - Admin page state uses Angular signals local to the standalone page; backend data fetching is centralized in `AdminApiService`.
   - Environment metadata remains read-only from `src/environments/*`.
 - Where styles/tokens live:
   - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
@@ -274,6 +282,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - workflow API client request/forbidden handling (`frontend/src/app/features/workflows/workflow-api.service.spec.ts`)
     - route contract for `/searches` and `/exports` guarded by `dossiers` entitlement (`frontend/src/app/app.routes.spec.ts`)
     - Playwright smoke for dossier-enabled shell navigation, search workflow rendering, and explicit export 403 feedback (`frontend/e2e/shell-routes.spec.ts`)
+  - T18 frontend admin workflow coverage includes:
+    - auth service admin-actor helper coverage (`frontend/src/app/auth/auth.service.spec.ts`)
+    - admin guard route access coverage (`frontend/src/app/auth/guards.spec.ts`)
+    - admin API client read/update/audit handling (`frontend/src/app/features/admin/admin-api.service.spec.ts`)
+    - route contract for `/admin` guarded by `authGuard + adminGuard` (`frontend/src/app/app.routes.spec.ts`)
+    - Playwright smoke for admin-route rendering, entitlement update flow, and non-admin redirect (`frontend/e2e/shell-routes.spec.ts`)
   - Repository integration coverage includes tenant-scoped create/read/list behavior, deterministic ordering, search-status updates, and migration up/down checks for dossier core storage.
   - T10 ingestion unit coverage includes:
     - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
@@ -1160,6 +1174,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - 2026-03-02 [local-login-storage-fix] Fixed the local OIDC callback state persistence by moving frontend pending-login storage to `localStorage` while keeping authenticated session tokens in `sessionStorage`, and added unit coverage for the split storage behavior.
   - 2026-03-02 [T17-playwright-dev] Fixed local Playwright runtime for container-first verification: `docker/dev.Dockerfile` now preinstalls Chromium in the `dev` image, `docker-compose.dev.yml` exports `PLAYWRIGHT_SKIP_INSTALL=1`, and `make verify-ui-e2e` now passes inside the dev container. Also tightened the T17 Playwright locator for shell navigation to avoid strict-mode ambiguity.
   - 2026-03-02 [T17] Replaced frontend workflow placeholders with working user-facing dashboard, dossier, search, and export views: added a tenant-aware frontend workflow API client, new protected `/searches` and `/exports` routes under the existing `dossiers` entitlement, refreshed shell navigation, and expanded unit/Playwright coverage for dossier-enabled user flows and export-forbidden feedback.
+  - 2026-03-02 [T18] Added frontend admin workflow support: new `/admin` route with dedicated `adminGuard`, shell visibility derived from admin roles/scopes instead of module entitlements, tenant-scoped admin API client for entitlement read/update plus audit review, a working admin page for subject entitlements and audit events, and expanded unit/Playwright coverage for admin access and non-admin redirects.
   - 2026-03-02 [T16] Added public dossier/search workflow APIs on top of the existing T8 storage model: new tenant-scoped v1 dossier list/create/detail routes, new search-request list/create/detail/status routes, ingestion enqueue wiring for search creation, deterministic repository list ordering/status updates, updated OpenAPI v1 contract, and expanded repository/HTTP coverage.
   - 2026-03-02 [T15-fix] Closed remaining T15 gaps: made entitlement update + audit persistence transactional, hardened migration bootstrap so partial legacy schemas fail closed instead of being marked applied, restored the stable default SQLite path under `services/api/`, and aligned the Playwright auth-route expectation with the real `/login?redirectTo=...` redirect.
   - 2026-02-27 [T15] Replaced in-memory entitlement/export-audit state with persistent SQLite storage: added T15 migration set (`0002_entitlements_audit_persistence.{up,down}.sql`), idempotent migration tracking (`schema_migrations`), new storage repositories/runtime helpers, new admin endpoint `GET /api/v1/tenants/{tenant_id}/audit/events`, updated OpenAPI v1 contract, and expanded test coverage for persistence/queryability.

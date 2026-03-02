@@ -67,6 +67,10 @@ export class AuthService {
     return this._authContext()?.tenantId ?? null;
   }
 
+  subject(): string | null {
+    return this._authContext()?.subject ?? null;
+  }
+
   hasModule(moduleKey: string): boolean {
     const normalizedModule = moduleKey.trim().toLowerCase();
     return this.moduleEntitlements().includes(normalizedModule);
@@ -80,6 +84,19 @@ export class AuthService {
     }
 
     return authContext.scopes.includes(normalizedScope);
+  }
+
+  isAdminActor(): boolean {
+    const authContext = this._authContext();
+    if (authContext === null) {
+      return false;
+    }
+
+    return (
+      authContext.roles.includes('admin') ||
+      authContext.scopes.includes('entitlements:write') ||
+      authContext.scopes.includes('entitlements:admin')
+    );
   }
 
   async beginLogin(redirectTo: string): Promise<string> {

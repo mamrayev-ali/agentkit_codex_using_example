@@ -171,6 +171,144 @@ test.describe('frontend auth routes', () => {
     await expect(page.getByText('open sanctions check')).toBeVisible();
   });
 
+  test('renders admin workspace for admin actor and persists entitlement update', async ({ page }) => {
+    await page.route('**/api/v1/auth/context', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authenticated: true,
+          subject: 'admin-1',
+          tenant_id: 'acme',
+          roles: ['admin'],
+          scopes: ['read:data', 'entitlements:write'],
+          module_entitlements: ['dashboard'],
+        }),
+      });
+    });
+
+    await page.route('**/api/v1/tenants/acme/audit/events', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          tenant_id: 'acme',
+          events: [
+            {
+              event_id: 'evt-1',
+              action: 'entitlements.updated',
+              actor_subject: 'admin-1',
+              target_subject: 'user-123',
+              tenant_id: 'acme',
+              outcome: 'success',
+              occurred_at: '2026-03-02T12:00:00Z',
+              reason: null,
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route('**/api/v1/tenants/acme/entitlements/user-123', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            tenant_id: 'acme',
+            subject: 'user-123',
+            enabled_modules: ['dashboard'],
+            audit_metadata: null,
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          tenant_id: 'acme',
+          subject: 'user-123',
+          enabled_modules: ['dashboard', 'watchlist'],
+          audit_metadata: {
+            event_id: 'evt-2',
+            action: 'entitlements.updated',
+            actor_subject: 'admin-1',
+            target_subject: 'user-123',
+            tenant_id: 'acme',
+            occurred_at: '2026-03-02T12:05:00Z',
+          },
+        }),
+      });
+    });
+
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem(
+        'decider.auth.session.v1',
+        JSON.stringify({
+          accessToken: 'fake-access-token',
+          tokenType: 'Bearer',
+          idToken: null,
+          refreshToken: null,
+          expiresAt: Date.now() + 10 * 60 * 1000,
+        }),
+      );
+    });
+
+    await page.goto('/admin');
+
+    await expect(page.getByRole('heading', { name: 'Entitlements and audit control' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Admin' })).toBeVisible();
+
+    await page.getByLabel('Subject').fill('user-123');
+    await page.getByRole('button', { name: 'Load entitlements' }).click();
+    await page.getByRole('checkbox', { name: /Watchlist/i }).check();
+    await page.getByRole('button', { name: 'Save entitlements' }).click();
+
+    await expect(
+      page.getByText(
+        'Entitlements updated for user-123. The subject will see changes after the next auth-context refresh.',
+      ),
+    ).toBeVisible();
+    await expect(page.locator('.audit-card strong').filter({ hasText: 'Entitlements updated' })).toBeVisible();
+  });
+
+  test('redirects non-admin user away from admin route', async ({ page }) => {
+    await page.route('**/api/v1/auth/context', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authenticated: true,
+          subject: 'demo-user',
+          tenant_id: 'acme',
+          roles: ['user'],
+          scopes: ['read:data'],
+          module_entitlements: ['dashboard', 'dossiers'],
+        }),
+      });
+    });
+
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem(
+        'decider.auth.session.v1',
+        JSON.stringify({
+          accessToken: 'fake-access-token',
+          tokenType: 'Bearer',
+          idToken: null,
+          refreshToken: null,
+          expiresAt: Date.now() + 10 * 60 * 1000,
+        }),
+      );
+    });
+
+    await page.goto('/admin');
+
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole('link', { name: 'Admin' })).toHaveCount(0);
+  });
+
   test('shows explicit backend-forbidden feedback for export request', async ({ page }) => {
     await page.route('**/api/v1/auth/context', async (route) => {
       await route.fulfill({

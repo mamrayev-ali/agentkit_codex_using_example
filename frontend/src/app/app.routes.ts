@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 
+import { adminGuard } from './auth/admin.guard';
 import { anonymousGuard } from './auth/anonymous.guard';
 import { authGuard } from './auth/auth.guard';
 import { moduleGuard } from './auth/module.guard';
@@ -56,6 +57,12 @@ export const appRoutes: Routes = [
     },
     loadComponent: () =>
       import('./pages/exports-page.component').then((m) => m.ExportsPageComponent),
+  },
+  {
+    path: 'admin',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./pages/admin-page.component').then((m) => m.AdminPageComponent),
   },
   {
     path: 'watchlist',
