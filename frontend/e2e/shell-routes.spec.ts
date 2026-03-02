@@ -271,7 +271,7 @@ test.describe('frontend auth routes', () => {
         'Entitlements updated for user-123. The subject will see changes after the next auth-context refresh.',
       ),
     ).toBeVisible();
-    await expect(page.getByText('Entitlements updated')).toBeVisible();
+    await expect(page.locator('.audit-card strong').filter({ hasText: 'Entitlements updated' })).toBeVisible();
   });
 
   test('redirects non-admin user away from admin route', async ({ page }) => {
