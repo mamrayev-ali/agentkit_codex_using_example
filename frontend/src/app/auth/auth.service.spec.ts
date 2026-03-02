@@ -132,7 +132,53 @@ describe('AuthService', () => {
     expect(service.hasModule('dashboard')).toBe(true);
     expect(service.accessToken()).toBe('token-value');
     expect(service.tenantId()).toBe('acme');
+    expect(service.subject()).toBe('demo-user');
     expect(service.hasScope('read:data')).toBe(true);
+  });
+
+  it('detects admin actor from roles or entitlement scopes', async () => {
+    const authContext = new FakeAuthContextService();
+    authContext.fetchResult = {
+      authenticated: true,
+      subject: 'admin-user',
+      tenantId: 'acme',
+      roles: ['admin'],
+      scopes: ['read:data', 'entitlements:write'],
+      moduleEntitlements: ['dashboard'],
+    };
+    const { service } = createAuthServiceForTest({ authContext });
+
+    const loginUrl = await service.beginLogin('/dashboard');
+    const state = new URL(loginUrl).searchParams.get('state');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'token-value',
+            token_type: 'Bearer',
+            expires_in: 3600,
+            id_token: 'id-token',
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      ),
+    );
+
+    await service.completeLoginFromCallback(
+      new URLSearchParams({
+        code: 'code-value',
+        state: state ?? '',
+      }),
+    );
+
+    expect(service.isAdminActor()).toBe(true);
   });
 
   it('rejects callback when state does not match pending login', async () => {

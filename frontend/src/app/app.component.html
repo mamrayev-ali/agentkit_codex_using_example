@@ -32,6 +32,9 @@
         <a *ngIf="isModuleVisible('dossiers')" routerLink="/exports" routerLinkActive="active">
           Exports
         </a>
+        <a *ngIf="isAdminVisible()" routerLink="/admin" routerLinkActive="active">
+          Admin
+        </a>
         <a *ngIf="isModuleVisible('watchlist')" routerLink="/watchlist" routerLinkActive="active">
           Watchlist
         </a>
@@ -41,8 +44,8 @@
     <div class="app-main">
       <header class="app-header shell-header">
         <div>
-          <p class="shell-header__eyebrow">User workflow</p>
-          <strong>Frontend dossier, search, and export operations</strong>
+          <p class="shell-header__eyebrow">Workspace</p>
+          <strong>Tenant workflow and admin operations</strong>
         </div>
 
         <button type="button" class="btn btn--secondary" (click)="logout()">Logout</button>

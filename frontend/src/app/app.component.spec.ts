@@ -7,6 +7,7 @@ class FakeAuthService {
   private authenticatedValue = false;
   private modulesValue: string[] = [];
   private contextValue: AuthContext | null = null;
+  private adminValue = false;
 
   logoutCalled = false;
 
@@ -22,6 +23,10 @@ class FakeAuthService {
     return this.modulesValue.includes(moduleKey);
   }
 
+  isAdminActor(): boolean {
+    return this.adminValue;
+  }
+
   createLogoutUrl(): string {
     return 'http://localhost:8080/realms/decider-local/protocol/openid-connect/logout';
   }
@@ -30,10 +35,16 @@ class FakeAuthService {
     this.logoutCalled = true;
   }
 
-  setState(next: { authenticated: boolean; modules: string[]; context: AuthContext | null }): void {
+  setState(next: {
+    authenticated: boolean;
+    modules: string[];
+    context: AuthContext | null;
+    isAdmin?: boolean;
+  }): void {
     this.authenticatedValue = next.authenticated;
     this.modulesValue = next.modules;
     this.contextValue = next.context;
+    this.adminValue = next.isAdmin ?? false;
   }
 }
 
@@ -59,6 +70,7 @@ describe('AppComponent', () => {
         scopes: ['read:data', 'export:data'],
         moduleEntitlements: ['dashboard', 'dossiers', 'watchlist'],
       },
+      isAdmin: true,
     });
 
     const app = new AppComponent(fakeAuthService as never);
@@ -67,6 +79,7 @@ describe('AppComponent', () => {
     expect(app.isModuleVisible('dashboard')).toBe(true);
     expect(app.isModuleVisible('watchlist')).toBe(true);
     expect(app.isModuleVisible('dossiers')).toBe(true);
+    expect(app.isAdminVisible()).toBe(true);
     expect(app.authContext()?.tenantId).toBe('acme');
   });
 });
