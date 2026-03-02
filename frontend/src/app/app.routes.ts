@@ -40,6 +40,24 @@ export const appRoutes: Routes = [
       import('./pages/dossiers-page.component').then((m) => m.DossiersPageComponent),
   },
   {
+    path: 'searches',
+    canActivate: [authGuard, moduleGuard],
+    data: {
+      requiredModule: 'dossiers',
+    },
+    loadComponent: () =>
+      import('./pages/searches-page.component').then((m) => m.SearchesPageComponent),
+  },
+  {
+    path: 'exports',
+    canActivate: [authGuard, moduleGuard],
+    data: {
+      requiredModule: 'dossiers',
+    },
+    loadComponent: () =>
+      import('./pages/exports-page.component').then((m) => m.ExportsPageComponent),
+  },
+  {
     path: 'watchlist',
     canActivate: [authGuard, moduleGuard],
     data: {

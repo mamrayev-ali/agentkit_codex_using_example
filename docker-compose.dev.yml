@@ -15,6 +15,7 @@ services:
       UV_CACHE_DIR: /workspace/.uv-cache
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       PNPM_STORE_DIR: /pnpm-store
+      PLAYWRIGHT_SKIP_INSTALL: "1"
     volumes:
       - ./:/workspace
       - dev-pnpm-store:/pnpm-store

@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint).
-  - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T17-T20.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX.
+  - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T18-T20.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -75,13 +75,19 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Legacy compatibility endpoint remains at `GET /health` (not included in OpenAPI schema).
 - `frontend/` - Angular shell scaffold from T3.
   - Current tracked state:
-    - Standalone Angular app with auth-aware routes: `/login`, `/auth/callback`, protected `/dashboard`, `/dossiers`, `/watchlist`, and guarded fallback `/**`.
+    - Standalone Angular app with auth-aware routes: `/login`, `/auth/callback`, protected `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/watchlist`, and guarded fallback `/**`.
     - OIDC Authorization Code + PKCE flow is implemented in frontend auth services (`auth.service`, `auth-context.service`, `token-storage.service`, `pkce`) with Keycloak endpoints from environment config.
     - Session lifecycle is enforced in client guards (`auth`, `anonymous`, `module`) with 401/session-expiry fallback to re-login.
     - App shell navigation visibility is driven by normalized backend `module_entitlements` from `/api/v1/auth/context`.
+    - Tenant dossier/search/export UI state is fetched through `frontend/src/app/features/workflows/workflow-api.service.ts`, which derives tenant path and bearer token from the existing frontend auth state instead of duplicating auth storage.
+    - Working user pages now exist for:
+      - dashboard summary and recent activity
+      - dossier create/list/select workflow
+      - search-request create/list workflow
+      - export request workflow with explicit 403 feedback
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
-    - Playwright config and smoke e2e auth-route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`.
+    - Playwright config and smoke e2e auth-route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`, now including dossier-enabled shell navigation and export-forbidden UX coverage.
 - `.github/workflows/` - CI gates and release-ready enforcement.
   - Current tracked state:
     - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, security scans, and final release gate job.
@@ -89,6 +95,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Current tracked state:
     - Provides `dev` service to run verification commands inside Docker.
     - Builds `dev` image from `docker/dev.Dockerfile` with `uv` preinstalled for backend verify commands.
+    - `dev` image now also preinstalls Playwright Chromium under `/ms-playwright`; compose sets `PLAYWRIGHT_SKIP_INSTALL=1` so containerized `make verify-ui-e2e` can run without per-invocation browser download.
     - Mounts repository and caches, including dedicated pnpm store volume.
     - T13 adds `runtime` profile services for walkthrough stack:
       - `postgres`, `redis`, `keycloak`, `keycloak-bootstrap`, `api`, `frontend`.
@@ -195,17 +202,22 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ## 6) Frontend / UI surface (if applicable)
 - Routing approach:
   - Public auth routes: `/login`, `/auth/callback`.
-  - Protected shell routes: `/dashboard`, `/dossiers`, `/watchlist`, fallback `/**`.
+  - Protected shell routes: `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/watchlist`, fallback `/**`.
   - Route guards:
     - `authGuard` redirects unauthenticated access to `/login` with `redirectTo`.
     - `anonymousGuard` redirects authenticated users away from login/callback to `/dashboard`.
     - `moduleGuard` enforces per-route `requiredModule` and redirects forbidden access to `/dashboard`.
+  - User workflow route rules:
+    - `/dashboard` remains `requiredModule: 'dashboard'`.
+    - `/dossiers`, `/searches`, and `/exports` all rely on `requiredModule: 'dossiers'`; export scope is still enforced only by backend.
   - Uses standalone components + lazy `loadComponent`.
 - State management approach:
   - Auth/session state is held in Angular signals inside `AuthService`.
   - Session token payload is stored in `sessionStorage` (`decider.auth.session.v1`) with pending PKCE login state key (`decider.auth.pending-login.v1`).
   - Shell keeps lightweight module visibility state derived from backend auth-context payload (`module_entitlements`).
   - `AuthContextService` normalizes backend payload (`tenant_id`, `roles`, `scopes`, `module_entitlements`) into frontend-safe shape.
+  - `AuthService` now also exposes read-only helpers for current access token, tenant, and scopes so feature services can call backend APIs without reimplementing auth-context parsing.
+  - Workflow page state uses Angular signals local to each standalone page; backend data fetching is centralized in `WorkflowApiService`.
   - Environment metadata remains read-only from `src/environments/*`.
 - Where styles/tokens live:
   - Temporary shell styles are local in component CSS and global reset in `src/styles.css`.
@@ -215,6 +227,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - How UI is verified vs design:
   - Current T3 verification is lint + unit tests + production build.
   - T12 adds Playwright smoke e2e route coverage for CI gate validation.
+  - T17 adds frontend smoke coverage for dossier-enabled search route rendering and export forbidden-state messaging.
 
 ## 7) Testing & verification map
 ### Local DoD (must pass before asking to push)
@@ -234,9 +247,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - ci: `pnpm --dir frontend lint && pnpm --dir frontend test -- --run && pnpm --dir frontend build`
 - Coverage target:
   - Local rules set >=80% coverage for critical modules once implemented.
-- Additional CI gate commands:
-  - `make verify-api-e2e` runs backend HTTP e2e marker suite (`pytest -m e2e_api`).
-  - `make verify-ui-e2e` runs Playwright UI suite via pinned `@playwright/test@1.52.0` and supports `PLAYWRIGHT_SKIP_INSTALL=1` for CI flows that install browsers separately.
+  - Additional CI gate commands:
+    - `make verify-api-e2e` runs backend HTTP e2e marker suite (`pytest -m e2e_api`).
+    - `make verify-ui-e2e` runs Playwright UI suite via pinned `@playwright/test@1.52.0` and supports `PLAYWRIGHT_SKIP_INSTALL=1` for CI flows that install browsers separately.
+    - Local container evidence for UI e2e now works directly through the preloaded `dev` image:
+      - `docker compose -f docker-compose.dev.yml run --rm dev make verify-ui-e2e`
   - API e2e smoke definition:
   - In-process HTTP checks include:
     - `GET /health` legacy compatibility contract
@@ -254,6 +269,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - dossier list/create/detail HTTP workflow and negative authz/resource cases (`services/api/tests/test_v1_http.py`)
     - search-request list/create/detail/status HTTP workflow and negative tenant/resource/validation cases (`services/api/tests/test_v1_http.py`)
     - OpenAPI required path assertions for new dossier/search routes (`services/api/tests/test_openapi_contract.py`)
+  - T17 frontend workflow coverage includes:
+    - auth service accessor coverage for current access token/tenant/scope helpers (`frontend/src/app/auth/auth.service.spec.ts`)
+    - workflow API client request/forbidden handling (`frontend/src/app/features/workflows/workflow-api.service.spec.ts`)
+    - route contract for `/searches` and `/exports` guarded by `dossiers` entitlement (`frontend/src/app/app.routes.spec.ts`)
+    - Playwright smoke for dossier-enabled shell navigation, search workflow rendering, and explicit export 403 feedback (`frontend/e2e/shell-routes.spec.ts`)
   - Repository integration coverage includes tenant-scoped create/read/list behavior, deterministic ordering, search-status updates, and migration up/down checks for dossier core storage.
   - T10 ingestion unit coverage includes:
     - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
@@ -1053,6 +1073,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml run --rm dev make detect`
     - `docker compose -f docker-compose.dev.yml run --rm dev make verify-smoke`
     - `docker compose -f docker-compose.dev.yml run --rm dev make verify-local`
+    - `docker compose -f docker-compose.dev.yml run --rm dev make verify-ui-e2e`
     - `docker compose -f docker-compose.dev.yml down -v`
   - T13 local runtime walkthrough profile:
     - `cp .env.runtime.example .env.runtime`
@@ -1132,6 +1153,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-02 [T17-playwright-dev] Fixed local Playwright runtime for container-first verification: `docker/dev.Dockerfile` now preinstalls Chromium in the `dev` image, `docker-compose.dev.yml` exports `PLAYWRIGHT_SKIP_INSTALL=1`, and `make verify-ui-e2e` now passes inside the dev container. Also tightened the T17 Playwright locator for shell navigation to avoid strict-mode ambiguity.
+  - 2026-03-02 [T17] Replaced frontend workflow placeholders with working user-facing dashboard, dossier, search, and export views: added a tenant-aware frontend workflow API client, new protected `/searches` and `/exports` routes under the existing `dossiers` entitlement, refreshed shell navigation, and expanded unit/Playwright coverage for dossier-enabled user flows and export-forbidden feedback.
   - 2026-03-02 [T16] Added public dossier/search workflow APIs on top of the existing T8 storage model: new tenant-scoped v1 dossier list/create/detail routes, new search-request list/create/detail/status routes, ingestion enqueue wiring for search creation, deterministic repository list ordering/status updates, updated OpenAPI v1 contract, and expanded repository/HTTP coverage.
   - 2026-03-02 [T15-fix] Closed remaining T15 gaps: made entitlement update + audit persistence transactional, hardened migration bootstrap so partial legacy schemas fail closed instead of being marked applied, restored the stable default SQLite path under `services/api/`, and aligned the Playwright auth-route expectation with the real `/login?redirectTo=...` redirect.
   - 2026-02-27 [T15] Replaced in-memory entitlement/export-audit state with persistent SQLite storage: added T15 migration set (`0002_entitlements_audit_persistence.{up,down}.sql`), idempotent migration tracking (`schema_migrations`), new storage repositories/runtime helpers, new admin endpoint `GET /api/v1/tenants/{tenant_id}/audit/events`, updated OpenAPI v1 contract, and expanded test coverage for persistence/queryability.

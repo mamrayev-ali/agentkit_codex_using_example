@@ -50,14 +50,14 @@ describe('AppComponent', () => {
     const fakeAuthService = new FakeAuthService();
     fakeAuthService.setState({
       authenticated: true,
-      modules: ['dashboard', 'watchlist'],
+      modules: ['dashboard', 'dossiers', 'watchlist'],
       context: {
         authenticated: true,
         subject: 'demo-user',
         tenantId: 'acme',
         roles: ['user'],
-        scopes: ['read:data'],
-        moduleEntitlements: ['dashboard', 'watchlist'],
+        scopes: ['read:data', 'export:data'],
+        moduleEntitlements: ['dashboard', 'dossiers', 'watchlist'],
       },
     });
 
@@ -66,7 +66,7 @@ describe('AppComponent', () => {
     expect(app.isAuthenticated()).toBe(true);
     expect(app.isModuleVisible('dashboard')).toBe(true);
     expect(app.isModuleVisible('watchlist')).toBe(true);
-    expect(app.isModuleVisible('dossiers')).toBe(false);
+    expect(app.isModuleVisible('dossiers')).toBe(true);
     expect(app.authContext()?.tenantId).toBe('acme');
   });
 });

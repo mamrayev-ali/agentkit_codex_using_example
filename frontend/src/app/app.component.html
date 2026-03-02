@@ -1,34 +1,57 @@
 <ng-container *ngIf="isAuthenticated(); else unauthenticatedOutlet">
-  <div class="shell app-shell">
-    <header class="shell__header app-header">
-      <div class="shell__title">
+  <div class="app-shell">
+    <aside class="app-sidebar shell-sidebar">
+      <div class="shell-sidebar__brand">
+        <p class="badge badge--brand">Decider</p>
         <h1>{{ appName }}</h1>
-        <p>Tenant shell ({{ environmentName }})</p>
-        <p *ngIf="authContext() as context" class="shell__meta">
-          {{ context.subject }} · {{ context.tenantId }}
-        </p>
+        <p class="shell-sidebar__caption">Tenant operations workspace</p>
       </div>
 
-      <div class="shell__actions">
-        <nav class="shell__nav" aria-label="Primary">
-          <a *ngIf="isModuleVisible('dashboard')" routerLink="/dashboard" routerLinkActive="active">
-            Dashboard
-          </a>
-          <a *ngIf="isModuleVisible('dossiers')" routerLink="/dossiers" routerLinkActive="active">
-            Dossiers
-          </a>
-          <a *ngIf="isModuleVisible('watchlist')" routerLink="/watchlist" routerLinkActive="active">
-            Watchlist
-          </a>
-        </nav>
+      <div *ngIf="authContext() as context" class="shell-sidebar__tenant panel">
+        <p class="shell-sidebar__eyebrow">Signed in</p>
+        <strong>{{ context.subject }}</strong>
+        <p class="shell-sidebar__tenant-id">{{ context.tenantId }}</p>
+        <p class="shell-sidebar__caption">Environment: {{ environmentName }}</p>
+      </div>
+
+      <nav class="shell-nav" aria-label="Primary">
+        <a
+          *ngIf="isModuleVisible('dashboard')"
+          routerLink="/dashboard"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+        >
+          Dashboard
+        </a>
+        <a *ngIf="isModuleVisible('dossiers')" routerLink="/dossiers" routerLinkActive="active">
+          Dossiers
+        </a>
+        <a *ngIf="isModuleVisible('dossiers')" routerLink="/searches" routerLinkActive="active">
+          Searches
+        </a>
+        <a *ngIf="isModuleVisible('dossiers')" routerLink="/exports" routerLinkActive="active">
+          Exports
+        </a>
+        <a *ngIf="isModuleVisible('watchlist')" routerLink="/watchlist" routerLinkActive="active">
+          Watchlist
+        </a>
+      </nav>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-header shell-header">
+        <div>
+          <p class="shell-header__eyebrow">User workflow</p>
+          <strong>Frontend dossier, search, and export operations</strong>
+        </div>
 
         <button type="button" class="btn btn--secondary" (click)="logout()">Logout</button>
-      </div>
-    </header>
+      </header>
 
-    <main class="shell__content">
-      <router-outlet />
-    </main>
+      <main class="shell-content">
+        <router-outlet />
+      </main>
+    </div>
   </div>
 </ng-container>
 
