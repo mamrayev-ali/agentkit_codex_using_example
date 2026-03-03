@@ -65,6 +65,27 @@ docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runti
 
 The walkthrough checklist and expected IDs live in `.agentkit/docs/DEMO_SCENARIOS.md`.
 
+## 4a) Run the automated T20 walkthrough suites
+
+API walkthrough coverage against the seeded baseline:
+
+```bash
+docker compose -f docker-compose.dev.yml run --rm dev \
+  bash -lc "cd /workspace/services/api && uv run pytest -q tests/test_walkthrough_e2e.py"
+```
+
+UI walkthrough coverage against the running runtime stack:
+
+```bash
+docker compose -f docker-compose.dev.yml run --rm dev \
+  make verify-ui-runtime-e2e PLAYWRIGHT_SKIP_INSTALL=1
+```
+
+Notes:
+- The runtime UI suite now has its own verification contract target: `make verify-ui-runtime-e2e`.
+- The default `make verify-ui-e2e` contract still covers mocked shell-route Playwright checks and intentionally does not replace the seeded runtime walkthrough.
+- Always reseed immediately before the runtime suite if prior runs mutated tenant entitlements or audit state.
+
 ## 5) Get a real Keycloak token (demo user)
 
 ```bash

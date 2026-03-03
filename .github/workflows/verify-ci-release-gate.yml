@@ -100,6 +100,82 @@ jobs:
             frontend/test-results
           if-no-files-found: ignore
 
+  ui-runtime-walkthrough:
+    name: ui-runtime-walkthrough
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Create runtime env file
+        run: |
+          cat > .env.runtime <<'EOF'
+          DECIDER_KEYCLOAK_ADMIN_USER=local-admin
+          DECIDER_KEYCLOAK_ADMIN_PASSWORD=local-admin-pass
+          DECIDER_KEYCLOAK_DEMO_USER_PASSWORD=demo-user-pass
+          DECIDER_KEYCLOAK_DEMO_ADMIN_PASSWORD=demo-admin-pass
+          DECIDER_LOCAL_API_PORT=8000
+          EOF
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Install Playwright browser runtime
+        run: pnpm --dir frontend dlx @playwright/test@1.52.0 install --with-deps chromium
+
+      - name: Start runtime walkthrough stack
+        run: docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime up -d --build
+
+      - name: Wait for runtime services to become healthy
+        run: |
+          for container in decider-api decider-frontend; do
+            echo "Waiting for ${container}..."
+            for attempt in $(seq 1 60); do
+              status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${container}")
+              if [ "${status}" = "healthy" ]; then
+                echo "${container} is healthy."
+                break
+              fi
+              if [ "${attempt}" -eq 60 ]; then
+                echo "${container} did not become healthy in time." >&2
+                docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime ps
+                docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime logs --tail 200
+                exit 1
+              fi
+              sleep 5
+            done
+          done
+
+      - name: Reseed deterministic walkthrough baseline
+        run: docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime exec -T api uv run --frozen python -m decider_api.demo_seed reseed
+
+      - name: Run runtime walkthrough UI gate
+        run: make verify-ui-runtime-e2e PLAYWRIGHT_SKIP_INSTALL=1
+
+      - name: Upload runtime walkthrough report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-runtime-walkthrough-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+
+      - name: Tear down runtime walkthrough stack
+        if: always()
+        run: docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime down -v
+
   security-semgrep:
     name: security-semgrep
     runs-on: ubuntu-latest
@@ -170,6 +246,7 @@ jobs:
       - verify-ci
       - api-e2e
       - ui-e2e
+      - ui-runtime-walkthrough
       - security-semgrep
       - security-trivy
       - security-codeql

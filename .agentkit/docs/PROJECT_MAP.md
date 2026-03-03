@@ -11,8 +11,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Ticket execution -> small diffs + ticket log + PROJECT_MAP update + verification.
 - Tech stack:
   - Process/tooling: Markdown docs, Bash/PowerShell scripts, Makefile contract.
-  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX + T18 frontend admin workflow for tenant entitlements and audit review via a dedicated admin route, role/scope-based guard, and admin API client + T19 deterministic demo seed/runtime harness (`python -m decider_api.demo_seed`) with canonical walkthrough checklist.
-  - Target product stack (planned next): full user/admin walkthrough automation for ROADMAP T20.
+  - Current implemented stack: Python/FastAPI backend with v1 OpenAPI contract, Keycloak-compatible JWT validation (including live JWKS URL mode), tenant guardrails, T7 entitlement-management APIs, T8 dossier/search-request core storage with SQL migrations, T9 export workflow (`export:data` scope + tenant gate + metadata-only audit events), T10 ingestion foundation (source-adapter abstraction, retry/timeout HTTP client, SSRF-safe URL policy, Celery queue layer + worker entrypoint), T11 observability guardrails (structured JSON logging, correlation-id propagation, `/metrics`, exception reporting hook), and T16 public dossier/search workflow APIs (tenant-scoped dossier list/create/detail plus search-request list/create/detail/status with ingestion queue trigger) + Angular 21 shell with backend-driven module visibility logic + T12 CI hardening gates (`verify-ci`, API e2e, UI Playwright e2e, Semgrep/Trivy/CodeQL) + T13 local runtime profile (`frontend + api + postgres + redis + keycloak`) + T14 frontend OIDC Authorization Code + PKCE flow (login/callback/logout, session guardrails, module route gating from backend auth-context) + T15 persistent entitlement/audit storage (SQLite-backed repositories, idempotent schema-migration tracking, admin audit read endpoint) + T17 frontend user workflows for dashboard, dossiers, searches, and exports backed by a tenant-aware workflow API client and explicit forbidden-state UX + T18 frontend admin workflow for tenant entitlements and audit review via a dedicated admin route, role/scope-based guard, and admin API client + T19 deterministic demo seed/runtime harness (`python -m decider_api.demo_seed`) with canonical walkthrough checklist + T20 walkthrough automation (API journey suite, a container-first runtime Playwright journey path stabilized for the seeded demo stack, and a dedicated CI/release-gate workflow job for the seeded runtime walkthrough).
+  - Target product stack (planned next): collect a green CI run for the new seeded runtime walkthrough gate and promote it into normal release evidence.
 - Where to start reading the code:
   - `AGENTS.md`
   - `.agentkit/docs/ROADMAP.md`
@@ -92,10 +92,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - current-session auth-context refresh after self-entitlement changes
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
-    - Playwright config and smoke e2e auth-route suite exist under `frontend/playwright.config.ts` and `frontend/e2e/`, now including dossier-enabled shell navigation, export-forbidden UX coverage, and admin-route coverage for entitlement update/audit review.
+    - Playwright config and e2e suites exist under `frontend/playwright.config.ts` and `frontend/e2e/`, combining mocked shell-route smoke coverage with a runtime-backed T20 walkthrough suite for `demo-user`/`demo-admin`.
+    - The runtime walkthrough helper now proxies both `localhost` and `127.0.0.1` browser-visible origins to compose services and explicitly primes `sessionStorage` on page bootstrap so container-first Playwright runs stay independent of host-network assumptions.
 - `.github/workflows/` - CI gates and release-ready enforcement.
   - Current tracked state:
-    - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, security scans, and final release gate job.
+    - `verify-ci-release-gate.yml` orchestrates required CI jobs: verify contract, API e2e, UI e2e, seeded runtime UI walkthrough e2e, security scans, and final release gate job.
 - `.agentkit/docs/DEMO_SCENARIOS.md` - Canonical T19 walkthrough checklist and seeded identifier reference for local user/admin demos.
 - `docker-compose.dev.yml` - Local container-first development runner.
   - Current tracked state:
@@ -259,8 +260,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Additional CI gate commands:
     - `make verify-api-e2e` runs backend HTTP e2e marker suite (`pytest -m e2e_api`).
     - `make verify-ui-e2e` runs Playwright UI suite via pinned `@playwright/test@1.52.0` and supports `PLAYWRIGHT_SKIP_INSTALL=1` for CI flows that install browsers separately.
+    - `make verify-ui-runtime-e2e` runs only the seeded runtime walkthrough Playwright suite and requires `.env.runtime` plus a running runtime profile.
     - Local container evidence for UI e2e now works directly through the preloaded `dev` image:
       - `docker compose -f docker-compose.dev.yml run --rm dev make verify-ui-e2e`
+      - `docker compose -f docker-compose.dev.yml run --rm dev make verify-ui-runtime-e2e PLAYWRIGHT_SKIP_INSTALL=1`
   - API e2e smoke definition:
   - In-process HTTP checks include:
     - `GET /health` legacy compatibility contract
@@ -289,6 +292,12 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - admin API client read/update/audit handling (`frontend/src/app/features/admin/admin-api.service.spec.ts`)
     - route contract for `/admin` guarded by `authGuard + adminGuard` (`frontend/src/app/app.routes.spec.ts`)
     - Playwright smoke for admin-route rendering, entitlement update flow, and non-admin redirect (`frontend/e2e/shell-routes.spec.ts`)
+  - T20 walkthrough coverage now begins with:
+    - runtime-only Playwright auth/session helpers for real Keycloak `demo-user` / `demo-admin` login state (`frontend/e2e/runtime-auth.ts`)
+    - a serial runtime walkthrough suite that exercises dashboard, dossiers, searches, exports, admin entitlements, and post-refresh watchlist access (`frontend/e2e/walkthrough.runtime.spec.ts`)
+    - a dedicated API walkthrough suite seeded by `decider_api.demo_seed` (`services/api/tests/test_walkthrough_e2e.py`)
+    - container-first runtime UI verification now passes after `demo_seed reseed` when executed from the `dev` container against the compose `runtime` profile
+    - the Makefile/runtime CI contract now exposes that suite as `make verify-ui-runtime-e2e`
   - Repository integration coverage includes tenant-scoped create/read/list behavior, deterministic ordering, search-status updates, and migration up/down checks for dossier core storage.
   - T10 ingestion unit coverage includes:
     - URL policy negative cases (`services/api/tests/test_url_policy_unit.py`)
@@ -432,10 +441,11 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Called from `Makefile` verify targets.
 - `Makefile` - Verification contract target definitions.
   - public surface / key exports:
-    - `detect`, `verify-local`, `verify-smoke`, `verify-ci`, `verify-api-e2e`, `verify-ui-e2e`.
+    - `detect`, `verify-local`, `verify-smoke`, `verify-ci`, `verify-api-e2e`, `verify-ui-e2e`, `verify-ui-runtime-e2e`.
   - invariants / assumptions:
     - Must run real checks (no placeholder behavior).
     - Must support profile matrix: scaffold-only / backend-present / frontend-present / backend+frontend.
+    - Runtime walkthrough target must fail closed when `.env.runtime` is missing instead of silently skipping seeded runtime coverage.
   - dependencies:
     - `.agentkit/scripts/verification_contract.py`.
     - Project tooling and language-specific commands by profile.
@@ -553,10 +563,10 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Consumed by `make verify-smoke`, `make verify-local`, and `make verify-ci` in frontend profile.
 - `frontend/playwright.config.ts` - Playwright runner config for CI UI e2e gate.
   - public surface / key exports:
-    - Declares `e2e/` suite, Angular web server bootstrapping, chromium project, and CI-safe reporter settings.
+    - Declares `e2e/` suite, chromium project, CI-safe reporter settings, and an optional runtime-stack mode that skips dev-server boot.
   - invariants / assumptions:
-    - UI e2e base URL remains `http://127.0.0.1:4200`.
-    - Uses `pnpm start` to boot Angular app before tests.
+    - Default UI e2e base URL remains `http://127.0.0.1:4200`.
+    - Uses `pnpm start` to boot Angular app before tests unless `DECIDER_E2E_RUNTIME=1` is set.
   - dependencies:
     - `@playwright/test@1.52.0` runtime via pinned `pnpm dlx`.
   - tests:
@@ -570,19 +580,42 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `frontend/playwright.config.ts`.
   - tests:
     - Executed via `make verify-ui-e2e` and CI `ui-e2e` job.
+- `frontend/e2e/runtime-auth.ts` - Runtime-only Playwright auth helper for T20 walkthrough suites.
+  - public surface / key exports:
+    - `runtimeWalkthroughEnabled()`, `createAuthenticatedPage()`, `fetchRuntimeAuthContext()`.
+    - Exchanges real Keycloak password-grant tokens for `demo-user` / `demo-admin` and seeds the existing frontend session-storage contract.
+  - invariants / assumptions:
+    - Requires `DECIDER_E2E_RUNTIME=1` plus local demo-user and demo-admin passwords in env vars.
+    - Targets the existing runtime stack endpoints unless overridden by `DECIDER_E2E_*` env vars.
+  - dependencies:
+    - `frontend/playwright.config.ts`, `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
+  - tests:
+    - Consumed by `frontend/e2e/walkthrough.runtime.spec.ts`.
+- `frontend/e2e/walkthrough.runtime.spec.ts` - Serial runtime-backed T20 walkthrough suite.
+  - public surface / key exports:
+    - Covers seeded `demo-user` dashboard/dossiers/searches/exports flow.
+    - Covers seeded `demo-admin` entitlement mutation and verifies refreshed `demo-user` watchlist access.
+  - invariants / assumptions:
+    - Assumes the T19 deterministic seed has been applied immediately before the suite runs.
+    - Runs serially because it mutates tenant entitlement state during the scenario.
+  - dependencies:
+    - `frontend/e2e/runtime-auth.ts`, runtime stack services, `.agentkit/docs/DEMO_SCENARIOS.md`.
+  - tests:
+    - Executed via `make verify-ui-runtime-e2e` against a pre-seeded runtime stack.
 - `.github/workflows/verify-ci-release-gate.yml` - CI pipeline for T12 release gate.
   - public surface / key exports:
-    - Jobs: `verify-ci-contract`, `api-e2e`, `ui-e2e`, `security-semgrep`, `security-trivy-fs`, `security-codeql`, `release-gate`.
+    - Jobs: `verify-ci-contract`, `api-e2e`, `ui-e2e`, `ui-runtime-walkthrough`, `security-semgrep`, `security-trivy-fs`, `security-codeql`, `release-gate`.
   - invariants / assumptions:
     - High-risk tickets require green `release-gate` before closure.
     - Security scan outputs are uploaded as SARIF/artifacts for auditability.
+    - Runtime walkthrough job must stand up the compose `runtime` profile, reseed the deterministic demo baseline, and upload Playwright artifacts before teardown.
   - dependencies:
     - GitHub Actions runners + configured permissions for security-events upload.
   - tests:
     - Triggered on `push`, `pull_request`, and manual dispatch.
 - `.agentkit/docs/RELEASE_READY_CHECKLIST.md` - Production-branch release checklist and DoD gate definition.
   - public surface / key exports:
-    - Mandatory CI jobs, evidence capture policy, and branch-protection required checks.
+    - Mandatory CI jobs, evidence capture policy, walkthrough artifact expectations, and branch-protection required checks.
   - invariants / assumptions:
     - Ticket closure for high-risk scope is blocked until all release-gate jobs are green.
   - dependencies:
@@ -592,10 +625,13 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `frontend/angular.json` - Angular workspace/build/test configuration.
   - public surface / key exports:
     - Build/serve/test targets and production file replacement for environments.
+    - Dev-server host allow-list used by the runtime walkthrough path.
   - invariants / assumptions:
     - CLI package manager is `pnpm`.
+    - `serve.options.allowedHosts` includes `frontend` so Playwright proxy fetches from the runtime container are accepted during container-first walkthrough runs.
   - dependencies:
     - Angular CLI/build tooling.
+    - `frontend/e2e/runtime-auth.ts` container proxy flow.
   - tests:
     - Indirectly validated through `pnpm build` and `pnpm test`.
 - `frontend/src/app/app.routes.ts` - Frontend route skeleton contract.
@@ -1001,6 +1037,17 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `decider_api.api.routes.v1`, auth dependencies, entitlement application state.
   - tests:
     - Executed in backend local/ci verification flows.
+- `services/api/tests/test_walkthrough_e2e.py` - T20 API walkthrough coverage tied to the deterministic T19 baseline.
+  - public surface / key exports:
+    - Verifies seeded `demo-user` auth-context, dossier/search visibility, export success, and cross-tenant denial.
+    - Verifies seeded `demo-admin` entitlement update, tenant audit review, and refreshed `demo-user` module entitlements.
+  - invariants / assumptions:
+    - Uses `reseed_demo_state()` as the single journey baseline.
+    - Overrides only the token validator so the real auth-context builder and route logic still execute.
+  - dependencies:
+    - `decider_api.demo_seed`, `decider_api.api.dependencies.auth`, `decider_api.app`.
+  - tests:
+    - Executed in backend `pytest -m e2e_api` flows.
 - `services/api/tests/test_permissions_unit.py` - Unit tests for permission policy helpers and entitlement resolution.
   - public surface / key exports:
     - Verifies default module mapping, admin checks, scope checks, module validation, and managed entitlement precedence.
@@ -1129,6 +1176,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - `docker compose -f docker-compose.dev.yml --profile runtime --env-file .env.runtime down -v`
     - full runbook: `.agentkit/docs/LOCAL_RUNTIME_STACK.md`
     - walkthrough checklist: `.agentkit/docs/DEMO_SCENARIOS.md`
+    - automated API walkthrough: `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/services/api && uv run pytest -q tests/test_walkthrough_e2e.py"`
+    - automated UI walkthrough: `docker compose -f docker-compose.dev.yml run --rm dev make verify-ui-runtime-e2e PLAYWRIGHT_SKIP_INSTALL=1`
   - Frontend shell:
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm install"`
     - `docker compose -f docker-compose.dev.yml run --rm dev bash -lc "cd /workspace/frontend && pnpm start"`
@@ -1136,6 +1185,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - CI-oriented gates:
     - `make verify-api-e2e`
     - `make verify-ui-e2e PLAYWRIGHT_SKIP_INSTALL=1`
+    - `make verify-ui-runtime-e2e PLAYWRIGHT_SKIP_INSTALL=1`
     - `pnpm --dir frontend dlx @playwright/test@1.52.0 install --with-deps chromium`
 - Required env vars:
   - Public health endpoint works without auth env vars.
@@ -1205,6 +1255,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-03 [T20-ci-gate] Added a dedicated `ui-runtime-walkthrough` GitHub Actions job backed by the new `make verify-ui-runtime-e2e` contract, so the seeded `demo-user`/`demo-admin` runtime walkthrough is now part of the protected release gate instead of being only local evidence.
+  - 2026-03-02 [T20-runtime-ui-fix] Stabilized the container-first runtime Playwright walkthrough by proxying both `localhost` and `127.0.0.1` origins inside the runtime auth helper, priming the browser session explicitly, allow-listing the Angular dev-server `frontend` host, and verifying the seeded runtime suite passes after reseed.
+  - 2026-03-02 [T20] Began end-to-end walkthrough gate implementation: added runtime-only Playwright auth/session helpers, a serial runtime-backed `demo-user`/`demo-admin` journey suite, dedicated API walkthrough e2e coverage seeded from `decider_api.demo_seed`, and a runtime-mode Playwright config path that reuses the existing stack instead of spawning the Angular dev server.
   - 2026-03-02 [T19] Added deterministic demo seed harness `python -m decider_api.demo_seed` for the local runtime stack, seeded synthetic tenant/dossier/search/audit baseline for walkthroughs, added repeatability tests, and documented canonical user/admin scenario steps in `.agentkit/docs/DEMO_SCENARIOS.md`.
   - 2026-03-02 [local-login-cors-fix] Added allow-listed backend CORS for `http://localhost:4200` via runtime settings so browser-based frontend auth-context requests succeed during the local Keycloak walkthrough, and added API coverage for CORS headers on unauthorized auth-context responses.
   - 2026-03-02 [local-login-callback-fix] Fixed frontend auth lifecycle so callback handling no longer deletes pending OIDC PKCE state during `AuthService` initialization or anonymous-guard auth checks; explicit logout/reset still clears both session and pending login state.
