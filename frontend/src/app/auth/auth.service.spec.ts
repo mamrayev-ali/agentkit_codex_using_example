@@ -43,7 +43,7 @@ class MemoryTokenStorage {
 class FakeAuthContextService {
   fetchResult: AuthContext = {
     authenticated: true,
-    subject: 'demo-user',
+    subject: 'analyst@acme.decider.local',
     tenantId: 'acme',
     roles: ['user'],
     scopes: ['read:data'],
@@ -90,6 +90,17 @@ describe('AuthService', () => {
     expect(storage.pendingLogin?.state).toBe(parsedUrl.searchParams.get('state'));
   });
 
+  it('includes login hint when requested', async () => {
+    const { service } = createAuthServiceForTest();
+
+    const loginUrl = await service.beginLogin('/dashboard', {
+      loginHint: 'analyst@decider.invalid',
+    });
+    const parsedUrl = new URL(loginUrl);
+
+    expect(parsedUrl.searchParams.get('login_hint')).toBe('analyst@decider.invalid');
+  });
+
   it('completes callback, stores session, and loads backend auth context', async () => {
     const { service } = createAuthServiceForTest();
 
@@ -132,7 +143,7 @@ describe('AuthService', () => {
     expect(service.hasModule('dashboard')).toBe(true);
     expect(service.accessToken()).toBe('token-value');
     expect(service.tenantId()).toBe('acme');
-    expect(service.subject()).toBe('demo-user');
+    expect(service.subject()).toBe('analyst@acme.decider.local');
     expect(service.hasScope('read:data')).toBe(true);
   });
 

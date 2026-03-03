@@ -54,7 +54,7 @@ def test_demo_user_walkthrough_matches_seeded_api_baseline() -> None:
     manifest = build_demo_seed_manifest()
     _set_claims_validator(
         _claims_for_actor(
-            subject="demo-user",
+            subject="analyst@acme.decider.local",
             tenant_id="acme",
             scopes=["read:data", "watchlist:view", "export:data"],
             roles=["user"],
@@ -110,13 +110,13 @@ def test_demo_user_walkthrough_matches_seeded_api_baseline() -> None:
 
 def test_demo_admin_update_changes_demo_user_auth_context_and_audit_trail() -> None:
     admin_claims = _claims_for_actor(
-        subject="demo-admin",
+        subject="admin@acme.decider.local",
         tenant_id="acme",
         scopes=["read:data", "watchlist:view", "export:data", "entitlements:write"],
         roles=["admin"],
     )
     demo_user_claims = _claims_for_actor(
-        subject="demo-user",
+        subject="analyst@acme.decider.local",
         tenant_id="acme",
         scopes=["read:data", "watchlist:view", "export:data"],
         roles=["user"],
@@ -126,11 +126,11 @@ def test_demo_admin_update_changes_demo_user_auth_context_and_audit_trail() -> N
     client = TestClient(app)
 
     entitlements_before_response = client.get(
-        "/api/v1/tenants/acme/entitlements/demo-user",
+        "/api/v1/tenants/acme/entitlements/analyst@acme.decider.local",
         headers=_authorization_headers(),
     )
     entitlements_update_response = client.put(
-        "/api/v1/tenants/acme/entitlements/demo-user",
+        "/api/v1/tenants/acme/entitlements/analyst@acme.decider.local",
         headers=_authorization_headers(),
         json={"enabled_modules": ["dashboard", "dossiers", "watchlist"]},
     )
@@ -167,7 +167,7 @@ def test_demo_admin_update_changes_demo_user_auth_context_and_audit_trail() -> N
     )
 
     assert auth_context_after_response.status_code == 200
-    assert auth_context_after_response.json()["subject"] == "demo-user"
+    assert auth_context_after_response.json()["subject"] == "analyst@acme.decider.local"
     assert auth_context_after_response.json()["module_entitlements"] == [
         "dashboard",
         "dossiers",

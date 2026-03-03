@@ -41,7 +41,7 @@ test.describe('runtime walkthrough journeys', () => {
     browser,
     request,
   }) => {
-    const user = await createAuthenticatedPage(browser, request, 'demo-user');
+    const user = await createAuthenticatedPage(browser, request, 'analyst@acme.decider.local');
     try {
       await user.page.goto('/dashboard');
       await user.page.waitForLoadState('networkidle');
@@ -74,13 +74,13 @@ test.describe('runtime walkthrough journeys', () => {
       await user.context.close();
     }
 
-    const admin = await createAuthenticatedPage(browser, request, 'demo-admin');
+    const admin = await createAuthenticatedPage(browser, request, 'admin@acme.decider.local');
     try {
       await admin.page.goto('/admin');
       await admin.page.waitForLoadState('networkidle');
 
       await expectHeading(admin.page, 'Entitlements and audit control');
-      await admin.page.getByLabel('Subject').fill('demo-user');
+      await admin.page.getByLabel('Subject').fill('analyst@acme.decider.local');
       await admin.page.getByRole('button', { name: 'Load entitlements' }).click();
 
       const watchlistCheckbox = admin.page.getByRole('checkbox', { name: /Watchlist/i });
@@ -90,7 +90,7 @@ test.describe('runtime walkthrough journeys', () => {
 
       await expect(
         admin.page.getByText(
-          'Entitlements updated for demo-user. The subject will see changes after the next auth-context refresh.',
+          'Entitlements updated for analyst@acme.decider.local. The subject will see changes after the next auth-context refresh.',
         ),
       ).toBeVisible({ timeout: 15_000 });
       await expect(
@@ -103,13 +103,13 @@ test.describe('runtime walkthrough journeys', () => {
       await admin.context.close();
     }
 
-    const refreshedAuthContext = await fetchRuntimeAuthContext(request, 'demo-user');
+    const refreshedAuthContext = await fetchRuntimeAuthContext(request, 'analyst@acme.decider.local');
     await expect(
       Array.isArray(refreshedAuthContext['module_entitlements']) &&
         refreshedAuthContext['module_entitlements'].includes('watchlist'),
     ).toBeTruthy();
 
-    const updatedUser = await createAuthenticatedPage(browser, request, 'demo-user');
+    const updatedUser = await createAuthenticatedPage(browser, request, 'analyst@acme.decider.local');
     try {
       await updatedUser.page.goto('/watchlist');
       await updatedUser.page.waitForLoadState('networkidle');

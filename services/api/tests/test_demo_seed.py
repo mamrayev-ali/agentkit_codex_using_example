@@ -12,7 +12,10 @@ def test_demo_seed_manifest_exposes_canonical_walkthrough_state() -> None:
 
     assert manifest["seed_version"] == "2026-03-02"
     assert [item["tenant_id"] for item in manifest["tenants"]] == ["acme", "umbrella"]
-    assert [item["subject"] for item in manifest["actors"]] == ["demo-user", "demo-admin"]
+    assert [item["subject"] for item in manifest["actors"]] == [
+        "analyst@acme.decider.local",
+        "admin@acme.decider.local",
+    ]
     assert [item["dossier_id"] for item in manifest["dossiers"]] == [
         "dos-acme-org-001",
         "dos-acme-person-001",

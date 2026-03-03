@@ -64,7 +64,7 @@ describe('AppComponent', () => {
       modules: ['dashboard', 'dossiers', 'watchlist'],
       context: {
         authenticated: true,
-        subject: 'demo-user',
+        subject: 'analyst@acme.decider.local',
         tenantId: 'acme',
         roles: ['user'],
         scopes: ['read:data', 'export:data'],

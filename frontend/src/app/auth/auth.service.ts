@@ -15,6 +15,10 @@ import { TokenStorageService } from './token-storage.service';
 const _CLOCK_SKEW_MS = 15_000;
 const _DASHBOARD_ROUTE = '/dashboard';
 
+type LoginRequestOptions = {
+  loginHint?: string | null;
+};
+
 function normalizeRoutePath(candidate: string): string {
   if (!candidate) {
     return _DASHBOARD_ROUTE;
@@ -99,7 +103,7 @@ export class AuthService {
     );
   }
 
-  async beginLogin(redirectTo: string): Promise<string> {
+  async beginLogin(redirectTo: string, options?: LoginRequestOptions): Promise<string> {
     const normalizedRedirect = normalizeRoutePath(redirectTo);
     const pkce = await createPkceMaterial();
 
@@ -121,6 +125,11 @@ export class AuthService {
       code_challenge: pkce.codeChallenge,
       code_challenge_method: 'S256',
     });
+
+    const loginHint = options?.loginHint?.trim();
+    if (loginHint) {
+      params.set('login_hint', loginHint);
+    }
 
     return `${this.resolveOidcEndpoint('auth')}?${params.toString()}`;
   }

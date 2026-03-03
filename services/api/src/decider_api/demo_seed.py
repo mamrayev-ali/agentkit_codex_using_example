@@ -31,14 +31,14 @@ DEMO_TENANTS: tuple[dict[str, str], ...] = (
 
 DEMO_ACTORS: tuple[dict[str, object], ...] = (
     {
-        "subject": "demo-user",
+        "subject": "analyst@acme.decider.local",
         "tenant_id": "acme",
         "roles": ["user"],
         "scopes": ["read:data", "watchlist:view", "export:data"],
         "description": "Primary end-user account from the local Keycloak realm.",
     },
     {
-        "subject": "demo-admin",
+        "subject": "admin@acme.decider.local",
         "tenant_id": "acme",
         "roles": ["admin"],
         "scopes": ["read:data", "watchlist:view", "export:data", "entitlements:write"],
@@ -100,14 +100,14 @@ DEMO_SEARCH_REQUESTS: tuple[dict[str, str], ...] = (
 DEMO_MANAGED_ENTITLEMENTS: tuple[dict[str, object], ...] = (
     {
         "tenant_id": "acme",
-        "subject": "demo-user",
+        "subject": "analyst@acme.decider.local",
         "enabled_modules": ["dashboard", "dossiers"],
-        "updated_by_subject": "demo-admin",
+        "updated_by_subject": "admin@acme.decider.local",
         "updated_at": "2026-03-02T09:25:00Z",
     },
     {
         "tenant_id": "acme",
-        "subject": "demo-admin",
+        "subject": "admin@acme.decider.local",
         "enabled_modules": ["dashboard", "dossiers", "watchlist"],
         "updated_by_subject": "system-seed",
         "updated_at": "2026-03-02T09:26:00Z",
@@ -117,8 +117,8 @@ DEMO_MANAGED_ENTITLEMENTS: tuple[dict[str, object], ...] = (
 DEMO_AUDIT_EVENTS: tuple[dict[str, str], ...] = (
     {
         "action": "entitlements.updated",
-        "actor_subject": "demo-admin",
-        "target_subject": "demo-user",
+        "actor_subject": "admin@acme.decider.local",
+        "target_subject": "analyst@acme.decider.local",
         "tenant_id": "acme",
         "outcome": "success",
         "reason": "seed_baseline",
@@ -126,7 +126,7 @@ DEMO_AUDIT_EVENTS: tuple[dict[str, str], ...] = (
     },
     {
         "action": "export.requested",
-        "actor_subject": "demo-user",
+        "actor_subject": "analyst@acme.decider.local",
         "tenant_id": "acme",
         "outcome": "success",
         "reason": "seed_baseline",
@@ -137,7 +137,7 @@ DEMO_AUDIT_EVENTS: tuple[dict[str, str], ...] = (
 DEMO_WALKTHROUGHS: tuple[dict[str, object], ...] = (
     {
         "scenario_id": "user-walkthrough",
-        "actor_subject": "demo-user",
+        "actor_subject": "analyst@acme.decider.local",
         "expected_tenant_id": "acme",
         "steps": [
             {
@@ -179,7 +179,7 @@ DEMO_WALKTHROUGHS: tuple[dict[str, object], ...] = (
     },
     {
         "scenario_id": "admin-walkthrough",
-        "actor_subject": "demo-admin",
+        "actor_subject": "admin@acme.decider.local",
         "expected_tenant_id": "acme",
         "steps": [
             {
@@ -191,18 +191,18 @@ DEMO_WALKTHROUGHS: tuple[dict[str, object], ...] = (
             {
                 "step_id": "admin-load-entitlements",
                 "surface": "frontend/api",
-                "path": "/api/v1/tenants/acme/entitlements/demo-user",
+                "path": "/api/v1/tenants/acme/entitlements/analyst@acme.decider.local",
                 "expected": (
-                    "Loading demo-user returns the seeded entitlement baseline "
+                    "Loading analyst@acme.decider.local returns the seeded entitlement baseline "
                     "['dashboard', 'dossiers']."
                 ),
             },
             {
                 "step_id": "admin-update-entitlements",
                 "surface": "frontend/api",
-                "path": "/api/v1/tenants/acme/entitlements/demo-user",
+                "path": "/api/v1/tenants/acme/entitlements/analyst@acme.decider.local",
                 "expected": (
-                    "Saving watchlist for demo-user creates a new "
+                    "Saving watchlist for analyst@acme.decider.local creates a new "
                     "entitlements.updated audit event."
                 ),
             },

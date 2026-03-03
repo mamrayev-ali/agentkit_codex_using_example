@@ -77,6 +77,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
   - Current tracked state:
     - Standalone Angular app with auth-aware routes: `/login`, `/auth/callback`, protected `/dashboard`, `/dossiers`, `/searches`, `/exports`, `/admin`, `/watchlist`, and guarded fallback `/**`.
     - OIDC Authorization Code + PKCE flow is implemented in frontend auth services (`auth.service`, `auth-context.service`, `token-storage.service`, `pkce`) with Keycloak endpoints from environment config.
+    - The `/login` route now uses a branded full-screen landing page (`login-page.component.ts`) that reuses UI Kit form/button tokens, renders the supplied raster background asset from `frontend/public/auth/login-background.png`, suppresses any self-registration affordance, and surfaces mock support contact details for manual account provisioning only.
+    - Frontend login initiation supports optional OIDC `login_hint` for the single default Authorization Code + PKCE sign-in path without handling passwords inside the SPA.
     - Session lifecycle is enforced in client guards (`auth`, `anonymous`, `module`) with 401/session-expiry fallback to re-login.
     - App shell navigation visibility is driven by normalized backend `module_entitlements` from `/api/v1/auth/context`, plus admin-only navigation derived from normalized auth roles/scopes.
     - Tenant dossier/search/export UI state is fetched through `frontend/src/app/features/workflows/workflow-api.service.ts`, which derives tenant path and bearer token from the existing frontend auth state instead of duplicating auth storage.
@@ -92,7 +94,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
       - current-session auth-context refresh after self-entitlement changes
     - Environment config files for dev/prod are in place.
     - Lint/test/build commands are wired into Makefile frontend verify hooks.
-    - Playwright config and e2e suites exist under `frontend/playwright.config.ts` and `frontend/e2e/`, combining mocked shell-route smoke coverage with a runtime-backed T20 walkthrough suite for `demo-user`/`demo-admin`.
+    - Playwright config and e2e suites exist under `frontend/playwright.config.ts` and `frontend/e2e/`, combining mocked shell-route smoke coverage with a runtime-backed T20 walkthrough suite for `analyst@acme.decider.local` / `admin@acme.decider.local`.
     - The runtime walkthrough helper now proxies both `localhost` and `127.0.0.1` browser-visible origins to compose services and explicitly primes `sessionStorage` on page bootstrap so container-first Playwright runs stay independent of host-network assumptions.
 - `.github/workflows/` - CI gates and release-ready enforcement.
   - Current tracked state:
@@ -293,7 +295,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - route contract for `/admin` guarded by `authGuard + adminGuard` (`frontend/src/app/app.routes.spec.ts`)
     - Playwright smoke for admin-route rendering, entitlement update flow, and non-admin redirect (`frontend/e2e/shell-routes.spec.ts`)
   - T20 walkthrough coverage now begins with:
-    - runtime-only Playwright auth/session helpers for real Keycloak `demo-user` / `demo-admin` login state (`frontend/e2e/runtime-auth.ts`)
+    - runtime-only Playwright auth/session helpers for real Keycloak `analyst@acme.decider.local` / `admin@acme.decider.local` login state (`frontend/e2e/runtime-auth.ts`)
     - a serial runtime walkthrough suite that exercises dashboard, dossiers, searches, exports, admin entitlements, and post-refresh watchlist access (`frontend/e2e/walkthrough.runtime.spec.ts`)
     - a dedicated API walkthrough suite seeded by `decider_api.demo_seed` (`services/api/tests/test_walkthrough_e2e.py`)
     - container-first runtime UI verification now passes after `demo_seed reseed` when executed from the `dev` container against the compose `runtime` profile
@@ -583,9 +585,9 @@ It explains what exists now, what contracts are enforced, and where new work sho
 - `frontend/e2e/runtime-auth.ts` - Runtime-only Playwright auth helper for T20 walkthrough suites.
   - public surface / key exports:
     - `runtimeWalkthroughEnabled()`, `createAuthenticatedPage()`, `fetchRuntimeAuthContext()`.
-    - Exchanges real Keycloak password-grant tokens for `demo-user` / `demo-admin` and seeds the existing frontend session-storage contract.
+    - Exchanges real Keycloak password-grant tokens for `analyst@acme.decider.local` / `admin@acme.decider.local` and seeds the existing frontend session-storage contract.
   - invariants / assumptions:
-    - Requires `DECIDER_E2E_RUNTIME=1` plus local demo-user and demo-admin passwords in env vars.
+    - Requires `DECIDER_E2E_RUNTIME=1` plus local analyst/admin runtime passwords in env vars.
     - Targets the existing runtime stack endpoints unless overridden by `DECIDER_E2E_*` env vars.
   - dependencies:
     - `frontend/playwright.config.ts`, `.agentkit/docs/LOCAL_RUNTIME_STACK.md`.
@@ -593,8 +595,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Consumed by `frontend/e2e/walkthrough.runtime.spec.ts`.
 - `frontend/e2e/walkthrough.runtime.spec.ts` - Serial runtime-backed T20 walkthrough suite.
   - public surface / key exports:
-    - Covers seeded `demo-user` dashboard/dossiers/searches/exports flow.
-    - Covers seeded `demo-admin` entitlement mutation and verifies refreshed `demo-user` watchlist access.
+    - Covers seeded `analyst@acme.decider.local` dashboard/dossiers/searches/exports flow.
+    - Covers seeded `admin@acme.decider.local` entitlement mutation and verifies refreshed `analyst@acme.decider.local` watchlist access.
   - invariants / assumptions:
     - Assumes the T19 deterministic seed has been applied immediately before the suite runs.
     - Runs serially because it mutates tenant entitlement state during the scenario.
@@ -1039,8 +1041,8 @@ It explains what exists now, what contracts are enforced, and where new work sho
     - Executed in backend local/ci verification flows.
 - `services/api/tests/test_walkthrough_e2e.py` - T20 API walkthrough coverage tied to the deterministic T19 baseline.
   - public surface / key exports:
-    - Verifies seeded `demo-user` auth-context, dossier/search visibility, export success, and cross-tenant denial.
-    - Verifies seeded `demo-admin` entitlement update, tenant audit review, and refreshed `demo-user` module entitlements.
+    - Verifies seeded `analyst@acme.decider.local` auth-context, dossier/search visibility, export success, and cross-tenant denial.
+    - Verifies seeded `admin@acme.decider.local` entitlement update, tenant audit review, and refreshed `analyst@acme.decider.local` module entitlements.
   - invariants / assumptions:
     - Uses `reseed_demo_state()` as the single journey baseline.
     - Overrides only the token validator so the real auth-context builder and route logic still execute.
@@ -1255,6 +1257,7 @@ It explains what exists now, what contracts are enforced, and where new work sho
 ---
 
 ## Map changelog (most recent first)
+  - 2026-03-03 [login-screen-refresh] Reworked the public `/login` screen into a UI-Kit-based branded landing page using the supplied `background.png` asset, removed the Google sign-in branch so only the default Authorization Code + PKCE flow remains, and kept manual-provisioning-only support messaging; the local seeded walkthrough actors now use email-shaped usernames (`analyst@acme.decider.local` / `admin@acme.decider.local`) across Keycloak, seeds, and runtime tests.
   - 2026-03-03 [T20-ci-gate] Added a dedicated `ui-runtime-walkthrough` GitHub Actions job backed by the new `make verify-ui-runtime-e2e` contract, so the seeded `demo-user`/`demo-admin` runtime walkthrough is now part of the protected release gate instead of being only local evidence.
   - 2026-03-02 [T20-runtime-ui-fix] Stabilized the container-first runtime Playwright walkthrough by proxying both `localhost` and `127.0.0.1` origins inside the runtime auth helper, priming the browser session explicitly, allow-listing the Angular dev-server `frontend` host, and verifying the seeded runtime suite passes after reseed.
   - 2026-03-02 [T20] Began end-to-end walkthrough gate implementation: added runtime-only Playwright auth/session helpers, a serial runtime-backed `demo-user`/`demo-admin` journey suite, dedicated API walkthrough e2e coverage seeded from `decider_api.demo_seed`, and a runtime-mode Playwright config path that reuses the existing stack instead of spawning the Angular dev server.

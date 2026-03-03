@@ -93,7 +93,7 @@ curl -sS -X POST http://localhost:8080/realms/decider-local/protocol/openid-conn
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=password" \
   -d "client_id=decider-cli" \
-  -d "username=demo-user" \
+  -d "username=analyst@acme.decider.local" \
   -d "password=${DECIDER_KEYCLOAK_DEMO_USER_PASSWORD}"
 ```
 
@@ -104,7 +104,7 @@ curl.exe -X POST "http://localhost:8080/realms/decider-local/protocol/openid-con
   -H "Content-Type: application/x-www-form-urlencoded" `
   -d "grant_type=password" `
   -d "client_id=decider-cli" `
-  -d "username=demo-user" `
+  -d "username=analyst@acme.decider.local" `
   -d "password=<value-from-.env.runtime>"
 ```
 
