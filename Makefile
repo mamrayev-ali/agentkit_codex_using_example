@@ -7,6 +7,7 @@
 # - make verify-ci
 # - make verify-api-e2e
 # - make verify-ui-e2e
+# - make verify-ui-runtime-e2e
 #
 # Behavior is profile-aware:
 # - scaffold-only: DOC-gate + placeholder-ban + detect + scaffold contract checks
@@ -47,13 +48,15 @@ FRONTEND_LOCAL_CMD ?= pnpm --dir frontend lint && pnpm --dir frontend test -- --
 FRONTEND_CI_CMD ?= pnpm --dir frontend lint && pnpm --dir frontend test -- --run && pnpm --dir frontend build
 FRONTEND_UI_E2E_INSTALL_CMD ?= pnpm --dir frontend dlx @playwright/test@1.52.0 install chromium
 FRONTEND_UI_E2E_TEST_CMD ?= pnpm --dir frontend dlx @playwright/test@1.52.0 test --config frontend/playwright.config.ts
+FRONTEND_UI_RUNTIME_E2E_ENV_FILE ?= .env.runtime
+FRONTEND_UI_RUNTIME_E2E_TEST_CMD ?= bash -lc "set -a && . $(FRONTEND_UI_RUNTIME_E2E_ENV_FILE) && set +a && cd frontend && DECIDER_E2E_RUNTIME=1 pnpm dlx @playwright/test@1.52.0 test --config playwright.config.ts e2e/walkthrough.runtime.spec.ts"
 
 .PHONY: help detect verify-smoke verify-local verify-ci verify-preflight \
 	verify-profile-smoke verify-profile-local verify-profile-ci \
 	verify-scaffold-smoke verify-scaffold-local verify-scaffold-ci \
 	verify-backend-smoke verify-backend-local verify-backend-ci \
 	verify-frontend-smoke verify-frontend-local verify-frontend-ci \
-	verify-api-e2e verify-ui-e2e
+	verify-api-e2e verify-ui-e2e verify-ui-runtime-e2e
 
 help:
 	@echo AgentKit verification targets:
@@ -63,6 +66,7 @@ help:
 	@echo   make verify-ci     - CI DoD checks for current profile
 	@echo   make verify-api-e2e - API e2e checks (backend only)
 	@echo   make verify-ui-e2e  - UI e2e checks (frontend only)
+	@echo   make verify-ui-runtime-e2e - runtime walkthrough UI e2e checks (frontend only)
 	@echo
 	@echo Detected profile: $(PROFILE)
 
@@ -164,3 +168,18 @@ else
 	@$(FRONTEND_UI_E2E_INSTALL_CMD) && $(FRONTEND_UI_E2E_TEST_CMD)
 endif
 	@echo verify-ui-e2e passed for profile: $(PROFILE)
+
+verify-ui-runtime-e2e:
+ifeq ($(HAS_FRONTEND),0)
+	@echo "ERROR: verify-ui-runtime-e2e requires frontend marker (frontend/package.json)." >&2
+	@exit 1
+endif
+	@test -f $(FRONTEND_UI_RUNTIME_E2E_ENV_FILE) || (echo "ERROR: verify-ui-runtime-e2e requires $(FRONTEND_UI_RUNTIME_E2E_ENV_FILE)." >&2; exit 1)
+ifeq ($(PLAYWRIGHT_SKIP_INSTALL),1)
+	@echo "==> runtime ui walkthrough checks (browser install skipped)"
+	@$(FRONTEND_UI_RUNTIME_E2E_TEST_CMD)
+else
+	@echo "==> runtime ui walkthrough checks"
+	@$(FRONTEND_UI_E2E_INSTALL_CMD) && $(FRONTEND_UI_RUNTIME_E2E_TEST_CMD)
+endif
+	@echo verify-ui-runtime-e2e passed for profile: $(PROFILE)
