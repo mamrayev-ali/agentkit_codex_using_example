@@ -46,7 +46,7 @@ set_user_password() {
 }
 
 wait_for_admin_login
-set_user_password "demo-user" "$DEMO_USER_PASSWORD"
-set_user_password "demo-admin" "$DEMO_ADMIN_PASSWORD"
+set_user_password "analyst@acme.decider.local" "$DEMO_USER_PASSWORD"
+set_user_password "admin@acme.decider.local" "$DEMO_ADMIN_PASSWORD"
 
 echo "[keycloak-bootstrap] realm '${REALM}' bootstrap completed"

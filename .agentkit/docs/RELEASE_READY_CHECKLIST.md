@@ -21,7 +21,7 @@ This checklist defines the production-branch release gate for Decider.
 - Artifact links are attached when applicable:
   - Playwright report artifact from `ui-e2e`
   - Runtime walkthrough Playwright report artifact from `ui-runtime-walkthrough`
-  - Walkthrough report/logs showing `demo-user` and `demo-admin` seeded journeys passed
+  - Walkthrough report/logs showing `analyst@acme.decider.local` and `admin@acme.decider.local` seeded journeys passed
   - SARIF findings from Trivy and CodeQL security tabs
 - Walkthrough evidence must map back to `.agentkit/docs/DEMO_SCENARIOS.md`:
   - user journey covers dashboard, dossiers, searches, and export acceptance

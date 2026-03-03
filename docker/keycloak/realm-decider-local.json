@@ -206,12 +206,12 @@
   ],
   "users": [
     {
-      "username": "demo-user",
+      "username": "analyst@acme.decider.local",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "User",
-      "email": "demo-user@decider.local",
+      "email": "analyst@acme.decider.local",
       "attributes": {
         "tenant_id": [
           "acme"
@@ -231,12 +231,12 @@
       ]
     },
     {
-      "username": "demo-admin",
+      "username": "admin@acme.decider.local",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "Admin",
-      "email": "demo-admin@decider.local",
+      "email": "admin@acme.decider.local",
       "attributes": {
         "tenant_id": [
           "acme"

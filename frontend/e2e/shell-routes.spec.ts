@@ -5,21 +5,21 @@ test.describe('frontend auth routes', () => {
     await page.goto('/');
 
     await expect(page).toHaveURL(/\/login\?redirectTo=%2Fdashboard$/);
-    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Вход' })).toBeVisible();
   });
 
   test('redirects protected route to login with redirect query', async ({ page }) => {
     await page.goto('/dossiers');
 
     await expect(page).toHaveURL(/\/login\?redirectTo=%2Fdossiers$/);
-    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Вход' })).toBeVisible();
   });
 
   test('redirects search route to login with redirect query', async ({ page }) => {
     await page.goto('/searches');
 
     await expect(page).toHaveURL(/\/login\?redirectTo=%2Fsearches$/);
-    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Вход' })).toBeVisible();
   });
 
   test('shows shell route for authenticated session with backend auth-context mock', async ({ page }) => {
@@ -29,7 +29,7 @@ test.describe('frontend auth routes', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           authenticated: true,
-          subject: 'demo-user',
+          subject: 'analyst@acme.decider.local',
           tenant_id: 'acme',
           roles: ['user'],
           scopes: ['read:data', 'watchlist:view'],
@@ -66,7 +66,7 @@ test.describe('frontend auth routes', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           authenticated: true,
-          subject: 'demo-user',
+          subject: 'analyst@acme.decider.local',
           tenant_id: 'acme',
           roles: ['user'],
           scopes: ['read:data'],
@@ -101,7 +101,7 @@ test.describe('frontend auth routes', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           authenticated: true,
-          subject: 'demo-user',
+          subject: 'analyst@acme.decider.local',
           tenant_id: 'acme',
           roles: ['user'],
           scopes: ['read:data'],
@@ -281,7 +281,7 @@ test.describe('frontend auth routes', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           authenticated: true,
-          subject: 'demo-user',
+          subject: 'analyst@acme.decider.local',
           tenant_id: 'acme',
           roles: ['user'],
           scopes: ['read:data'],
@@ -316,7 +316,7 @@ test.describe('frontend auth routes', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           authenticated: true,
-          subject: 'demo-user',
+          subject: 'analyst@acme.decider.local',
           tenant_id: 'acme',
           roles: ['user'],
           scopes: ['read:data'],

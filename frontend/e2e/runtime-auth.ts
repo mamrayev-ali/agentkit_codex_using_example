@@ -17,7 +17,7 @@ const _DEFAULT_ISSUER_URL =
 const _TOKEN_ENDPOINT = `${process.env.DECIDER_E2E_KEYCLOAK_ISSUER ?? _DEFAULT_ISSUER_URL}/protocol/openid-connect/token`;
 const _TOKEN_CLIENT_ID = process.env.DECIDER_E2E_CLI_CLIENT_ID ?? 'decider-cli';
 
-export type RuntimeActor = 'demo-user' | 'demo-admin';
+export type RuntimeActor = 'analyst@acme.decider.local' | 'admin@acme.decider.local';
 
 export type RuntimePage = {
   context: BrowserContext;
@@ -26,7 +26,7 @@ export type RuntimePage = {
 
 function readActorPassword(actor: RuntimeActor): string {
   const password =
-    actor === 'demo-user'
+    actor === 'analyst@acme.decider.local'
       ? process.env.DECIDER_KEYCLOAK_DEMO_USER_PASSWORD
       : process.env.DECIDER_KEYCLOAK_DEMO_ADMIN_PASSWORD;
 

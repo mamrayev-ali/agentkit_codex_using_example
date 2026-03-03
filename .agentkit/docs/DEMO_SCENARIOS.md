@@ -32,8 +32,8 @@ The reseed command creates this deterministic baseline:
   - `acme` for the main walkthrough
   - `umbrella` as isolation-only background data
 - Keycloak actors:
-  - `demo-user` in tenant `acme`
-  - `demo-admin` in tenant `acme`
+  - `analyst@acme.decider.local` in tenant `acme`
+  - `admin@acme.decider.local` in tenant `acme`
 - Dossiers:
   - `dos-acme-org-001` -> `Acme Logistics LLP`
   - `dos-acme-person-001` -> `Aida Sarsen`
@@ -43,14 +43,14 @@ The reseed command creates this deterministic baseline:
   - `req-acme-002` -> completed
   - `req-umbrella-001` -> failed
 - Managed entitlements:
-  - `demo-user` -> `dashboard`, `dossiers`
-  - `demo-admin` -> `dashboard`, `dossiers`, `watchlist`
+  - `analyst@acme.decider.local` -> `dashboard`, `dossiers`
+  - `admin@acme.decider.local` -> `dashboard`, `dossiers`, `watchlist`
 - Audit baseline:
   - `entitlements-updated-1`
   - `export-audit-2`
 
 ## 3) User walkthrough
-Login as `demo-user` and confirm:
+Login as `analyst@acme.decider.local` and confirm:
 
 1. `/dashboard`
    Expected: tenant resolves to `acme`; auth-context returns `dashboard` and `dossiers`.
@@ -61,21 +61,21 @@ Login as `demo-user` and confirm:
 4. `/exports`
    Expected: export request is accepted for `acme`.
 5. Isolation spot-check
-   Expected: no `umbrella` dossier or search request appears anywhere in the UI/API responses for `demo-user`.
+   Expected: no `umbrella` dossier or search request appears anywhere in the UI/API responses for `analyst@acme.decider.local`.
 
 ## 4) Admin walkthrough
-Login as `demo-admin` and confirm:
+Login as `admin@acme.decider.local` and confirm:
 
 1. `/admin`
    Expected: admin workspace opens for tenant `acme`.
-2. Load subject `demo-user`
+2. Load subject `analyst@acme.decider.local`
    Expected: current modules are `dashboard` and `dossiers`.
 3. Add `watchlist` and save
    Expected: API accepts the update and emits a new `entitlements.updated` audit event.
 4. Review audit events
    Expected: the list already contains `entitlements-updated-1` and `export-audit-2`, plus the new admin update event after save.
-5. Refresh `demo-user` auth context
-   Expected: on the next auth-context refresh, `demo-user` now has `watchlist` in addition to the seeded baseline modules.
+5. Refresh `analyst@acme.decider.local` auth context
+   Expected: on the next auth-context refresh, `analyst@acme.decider.local` now has `watchlist` in addition to the seeded baseline modules.
 
 ## 5) Notes
 - All seeded names, IDs, and timestamps are synthetic.
